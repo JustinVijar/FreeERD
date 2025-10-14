@@ -1,0 +1,17 @@
+title "My ERD diagram"
+
+table Products {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str,
+  expiry: date [default=NOW]
+}
+
+table Orders {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  order_date: date [default=NOW]
+}
+
+// relationships
+Products.id > Orders.product_id
