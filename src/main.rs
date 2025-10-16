@@ -239,7 +239,7 @@ fn print_about() {
     println!("  that it will be useful, but WITHOUT ANY WARRANTY; without even the implied");
     println!("  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.");
     println!("  See the LICENSE file for more details.\n");
-    println!("Repository: https://github.com/yourusername/FreeERD");
+    println!("Repository: https://github.com/JustinVijar/FreeERD");
     println!("\nFor help and usage information, run: free-erd help\n");
 }
 
