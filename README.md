@@ -14,6 +14,25 @@
 
 ## 🚀 Installation
 
+### Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from the [Releases page](https://github.com/JustinVijar/FreeERD/releases):
+
+- **Linux**: `free-erd-linux-x86_64`
+- **Windows**: `free-erd-windows-x86_64.exe`
+- **macOS (Intel)**: `free-erd-macos-x86_64`
+- **macOS (Apple Silicon)**: `free-erd-macos-aarch64`
+
+#### Linux/macOS
+```bash
+# Download and make executable
+chmod +x free-erd-*
+sudo mv free-erd-* /usr/local/bin/free-erd
+```
+
+#### Windows
+Download the `.exe` file and add it to your PATH or run it directly.
+
 ### From Source
 
 ```bash
