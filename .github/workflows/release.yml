@@ -72,20 +72,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
+          merge-multiple: true
 
       - name: List artifacts
-        run: ls -R ./artifacts
-
-      - name: Prepare release files
-        run: |
-          mkdir -p release-files
-          find ./artifacts -type f -exec cp {} release-files/ \;
-          ls -la release-files/
+        run: ls -la ./artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: release-files/*
+          files: ./artifacts/*
           draft: false
           prerelease: false
           generate_release_notes: true
