@@ -771,22 +771,27 @@ impl SvgRenderer {
             super::super::ast::RelationshipType::ManyToMany => "M",
         };
         
-        // Background rectangle dimensions
-        let bg_width = 18.0;
-        let bg_height = 18.0;
-        let offset = 14.0; // Distance from the dot to center of box
-        
-        // Calculate background rectangle center position based on connection side
-        let (bg_center_x, bg_center_y) = match side {
-            ConnectionSide::Left => (x - offset, y),      // Left of box
-            ConnectionSide::Right => (x + offset, y),     // Right of box
-            ConnectionSide::Top => (x, y - offset),       // Above box
-            ConnectionSide::Bottom => (x, y + offset),    // Below box
+        // Position the label outside the box based on the connection side
+        let offset = 12.0; // Distance from the dot
+        let (text_x, text_y, anchor) = match side {
+            ConnectionSide::Left => (x - offset, y + 4.0, "end"),      // Left of box
+            ConnectionSide::Right => (x + offset, y + 4.0, "start"),   // Right of box
+            ConnectionSide::Top => (x, y - offset + 4.0, "middle"),    // Above box
+            ConnectionSide::Bottom => (x, y + offset + 4.0, "middle"), // Below box
         };
         
-        // Calculate top-left corner of background rectangle
-        let bg_x = bg_center_x - bg_width / 2.0;
-        let bg_y = bg_center_y - bg_height / 2.0;
+        // Background rectangle dimensions
+        let bg_width = 16.0;
+        let bg_height = 16.0;
+        let bg_padding = 2.0;
+        
+        // Calculate background rectangle position based on text anchor
+        let (bg_x, bg_y) = match anchor {
+            "end" => (text_x - bg_width - bg_padding, text_y - bg_height / 2.0 - 2.0),
+            "start" => (text_x + bg_padding, text_y - bg_height / 2.0 - 2.0),
+            "middle" => (text_x - bg_width / 2.0, text_y - bg_height / 2.0 - 2.0),
+            _ => (text_x - bg_width / 2.0, text_y - bg_height / 2.0 - 2.0),
+        };
         
         // Render background rectangle (black with slight rounding)
         self.content.push_str(&format!(
@@ -794,16 +799,10 @@ impl SvgRenderer {
             bg_x, bg_y, bg_width, bg_height
         ));
         
-        // Text position: centered in the box
-        // For vertical centering, we need to account for the font baseline
-        // Using dominant-baseline="middle" for true vertical centering
-        let text_x = bg_center_x;
-        let text_y = bg_center_y;
-        
-        // Render the text label (white text on black background, centered)
+        // Render the text label (white text on black background)
         self.content.push_str(&format!(
-            "  <text x=\"{:.6}\" y=\"{:.6}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"12\" font-weight=\"bold\" fill=\"white\">{}</text>\n",
-            text_x, text_y, label
+            "  <text x=\"{:.6}\" y=\"{:.6}\" text-anchor=\"{}\" font-size=\"12\" font-weight=\"bold\" fill=\"white\">{}</text>\n",
+            text_x, text_y, anchor, label
         ));
     }
     
