@@ -1,0 +1,14 @@
+title "Syntax Error Test"
+
+// Missing colon after column name
+table Users {
+  id int [pk],
+  name: str
+}
+
+table Products {
+  id: int [pk],
+  price: float
+}
+
+Users.id > Products.id

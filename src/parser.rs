@@ -1,29 +1,68 @@
 use crate::ast::*;
-use crate::lexer::{Lexer, Token};
+use crate::lexer::{Lexer, Token, Spanned, Span};
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<Spanned<Token>>,
     position: usize,
+    source: String,
 }
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken { expected: String, found: Token },
-    UnexpectedEof,
-    InvalidAttribute(String),
-    InvalidRelationship(String),
+    UnexpectedToken { expected: String, found: Token, span: Span },
+    UnexpectedEof { span: Span },
+    InvalidAttribute { name: String, span: Span },
+    InvalidRelationship { msg: String, span: Span },
 }
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ParseError::UnexpectedToken { expected, found } => {
+            ParseError::UnexpectedToken { expected, found, .. } => {
                 write!(f, "Expected {}, but found {}", expected, found)
             }
-            ParseError::UnexpectedEof => write!(f, "Unexpected end of file"),
-            ParseError::InvalidAttribute(msg) => write!(f, "Invalid attribute: {}", msg),
-            ParseError::InvalidRelationship(msg) => write!(f, "Invalid relationship: {}", msg),
+            ParseError::UnexpectedEof { .. } => write!(f, "Unexpected end of file"),
+            ParseError::InvalidAttribute { name, .. } => write!(f, "Invalid attribute: {}", name),
+            ParseError::InvalidRelationship { msg, .. } => write!(f, "Invalid relationship: {}", msg),
         }
+    }
+}
+
+impl ParseError {
+    pub fn span(&self) -> Span {
+        match self {
+            ParseError::UnexpectedToken { span, .. } => *span,
+            ParseError::UnexpectedEof { span } => *span,
+            ParseError::InvalidAttribute { span, .. } => *span,
+            ParseError::InvalidRelationship { span, .. } => *span,
+        }
+    }
+    
+    /// Format error with Rust-like error messages including line numbers and source context
+    pub fn format_with_source(&self, source: &str, filename: &str) -> String {
+        let mut output = String::new();
+        
+        // Error header
+        output.push_str(&format!("\x1b[1;31merror\x1b[0m: {}\n", self));
+        
+        let span = self.span();
+        // Location info
+        output.push_str(&format!("  \x1b[1;34m-->\x1b[0m {}:{}:{}\n", filename, span.line, span.column));
+        output.push_str("   \x1b[1;34m|\x1b[0m\n");
+        
+        // Get the source line
+        if let Some(line_text) = source.lines().nth(span.line - 1) {
+            // Line number and source
+            output.push_str(&format!(" \x1b[1;34m{:>3} |\x1b[0m {}\n", span.line, line_text));
+            
+            // Error indicator (^^^)
+            output.push_str("   \x1b[1;34m|\x1b[0m ");
+            output.push_str(&" ".repeat(span.column - 1));
+            output.push_str(&format!("\x1b[1;31m{}\x1b[0m", "^".repeat(span.length.max(1))));
+            output.push_str("\n");
+        }
+        
+        output
     }
 }
 
@@ -36,15 +75,24 @@ impl Parser {
         Parser {
             tokens,
             position: 0,
+            source: input.to_string(),
         }
     }
     
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+    
     fn current_token(&self) -> &Token {
-        self.tokens.get(self.position).unwrap_or(&Token::Eof)
+        self.tokens.get(self.position).map(|t| &t.value).unwrap_or(&Token::Eof)
+    }
+    
+    fn current_span(&self) -> Span {
+        self.tokens.get(self.position).map(|t| t.span).unwrap_or(Span::new(0, 0, 0))
     }
     
     fn peek_token(&self, offset: usize) -> &Token {
-        self.tokens.get(self.position + offset).unwrap_or(&Token::Eof)
+        self.tokens.get(self.position + offset).map(|t| &t.value).unwrap_or(&Token::Eof)
     }
     
     fn advance(&mut self) {
@@ -76,6 +124,7 @@ impl Parser {
             Err(ParseError::UnexpectedToken {
                 expected: format!("{}", expected),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             })
         }
     }
@@ -105,6 +154,7 @@ impl Parser {
                     return Err(ParseError::UnexpectedToken {
                         expected: "title, table, or relationship".to_string(),
                         found: self.current_token().clone(),
+                        span: self.current_span(),
                     });
                 }
             }
@@ -127,14 +177,17 @@ impl Parser {
             Err(ParseError::UnexpectedToken {
                 expected: "string".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             })
         }
     }
     
     fn parse_table(&mut self) -> Result<Table, ParseError> {
+        let table_start_span = self.current_span();
         self.expect_token(Token::Table)?;
         self.skip_newlines();
         
+        let table_name_span = self.current_span();
         let table_name = if let Token::Identifier(name) = self.current_token() {
             let name = name.clone();
             self.advance();
@@ -143,6 +196,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "table name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -150,7 +204,7 @@ impl Parser {
         self.expect_token(Token::LeftBrace)?;
         self.skip_comments_and_newlines();
         
-        let mut table = Table::new(table_name);
+        let mut table = Table::with_span(table_name, table_name_span);
         
         while !matches!(self.current_token(), Token::RightBrace | Token::Eof) {
             let column = self.parse_column()?;
@@ -170,6 +224,7 @@ impl Parser {
     }
     
     fn parse_column(&mut self) -> Result<Column, ParseError> {
+        let column_start_span = self.current_span();
         let column_name = if let Token::Identifier(name) = self.current_token() {
             let name = name.clone();
             self.advance();
@@ -178,6 +233,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "column name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -192,10 +248,11 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "data type".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
-        let mut column = Column::new(column_name, datatype);
+        let mut column = Column::with_span(column_name, datatype, column_start_span);
         
         self.skip_newlines();
         
@@ -260,7 +317,10 @@ impl Parser {
                     Attribute::Default(default_value)
                 }
                 _ => {
-                    return Err(ParseError::InvalidAttribute(attr_name.clone()));
+                    return Err(ParseError::InvalidAttribute {
+                        name: attr_name.clone(),
+                        span: self.current_span(),
+                    });
                 }
             };
             Ok(attr)
@@ -268,6 +328,7 @@ impl Parser {
             Err(ParseError::UnexpectedToken {
                 expected: "attribute".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             })
         }
     }
@@ -298,6 +359,7 @@ impl Parser {
             _ => Err(ParseError::UnexpectedToken {
                 expected: "default value".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             }),
         }
     }
@@ -312,6 +374,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "table name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -325,6 +388,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "field name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -351,6 +415,7 @@ impl Parser {
                 return Err(ParseError::UnexpectedToken {
                     expected: "relationship operator (<, >, <>, -)".to_string(),
                     found: self.current_token().clone(),
+                    span: self.current_span(),
                 });
             }
         };
@@ -365,6 +430,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "table name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -378,6 +444,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 expected: "field name".to_string(),
                 found: self.current_token().clone(),
+                span: self.current_span(),
             });
         };
         
@@ -387,6 +454,7 @@ impl Parser {
             to_table,
             to_field,
             relationship_type,
+            span: Some(self.current_span()),
         })
     }
 }

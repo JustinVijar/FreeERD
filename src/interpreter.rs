@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::lexer::Span;
 use std::collections::{HashMap, HashSet};
 
 pub struct Interpreter {
@@ -7,37 +8,77 @@ pub struct Interpreter {
 
 #[derive(Debug)]
 pub enum ValidationError {
-    DuplicateTable(String),
-    DuplicateColumn { table: String, column: String },
-    MultiplePrimaryKeys(String),
-    TableNotFound(String),
-    ColumnNotFound { table: String, column: String },
-    InvalidRelationship(String),
+    DuplicateTable { name: String, span: Option<Span> },
+    DuplicateColumn { table: String, column: String, span: Option<Span> },
+    TableNotFound { name: String, span: Option<Span> },
+    ColumnNotFound { table: String, column: String, span: Option<Span> },
+    InvalidRelationship { msg: String, span: Option<Span> },
 }
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ValidationError::DuplicateTable(name) => {
+            ValidationError::DuplicateTable { name, .. } => {
                 write!(f, "Duplicate table definition: {}", name)
             }
-            ValidationError::DuplicateColumn { table, column } => {
+            ValidationError::DuplicateColumn { table, column, .. } => {
                 write!(f, "Duplicate column '{}' in table '{}'", column, table)
             }
-            ValidationError::MultiplePrimaryKeys(table) => {
-                write!(f, "Table '{}' has multiple primary keys", table)
+            ValidationError::TableNotFound { name, .. } => {
+                write!(f, "Table '{}' not found", name)
             }
-            ValidationError::TableNotFound(table) => {
-                write!(f, "Table '{}' not found", table)
-            }
-            ValidationError::ColumnNotFound { table, column } => {
+            ValidationError::ColumnNotFound { table, column, .. } => {
                 write!(f, "Column '{}' not found in table '{}'", column, table)
             }
-            ValidationError::InvalidRelationship(msg) => {
+            ValidationError::InvalidRelationship { msg, .. } => {
                 write!(f, "Invalid relationship: {}", msg)
             }
         }
     }
+}
+
+impl ValidationError {
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            ValidationError::DuplicateTable { span, .. } => *span,
+            ValidationError::DuplicateColumn { span, .. } => *span,
+            ValidationError::TableNotFound { span, .. } => *span,
+            ValidationError::ColumnNotFound { span, .. } => *span,
+            ValidationError::InvalidRelationship { span, .. } => *span,
+        }
+    }
+    
+    /// Format error with Rust-like error messages including line numbers and source context
+    pub fn format_with_source(&self, source: &str, filename: &str) -> String {
+        let mut output = String::new();
+        
+        // Error header
+        output.push_str(&format!("\x1b[1;31merror\x1b[0m: {}\n", self));
+        
+        if let Some(span) = self.span() {
+            // Location info
+            output.push_str(&format!("  \x1b[1;34m-->\x1b[0m {}:{}:{}\n", filename, span.line, span.column));
+            output.push_str("   \x1b[1;34m|\x1b[0m\n");
+            
+            // Get the source line
+            if let Some(line_text) = get_source_line(source, span.line) {
+                // Line number and source
+                output.push_str(&format!(" \x1b[1;34m{:>3} |\x1b[0m {}\n", span.line, line_text));
+                
+                // Error indicator (^^^)
+                output.push_str("   \x1b[1;34m|\x1b[0m ");
+                output.push_str(&" ".repeat(span.column - 1));
+                output.push_str(&format!("\x1b[1;31m{}\x1b[0m", "^".repeat(span.length.max(1))));
+                output.push_str("\n");
+            }
+        }
+        
+        output
+    }
+}
+
+fn get_source_line(source: &str, line_number: usize) -> Option<String> {
+    source.lines().nth(line_number - 1).map(|s| s.to_string())
 }
 
 impl std::error::Error for ValidationError {}
@@ -74,7 +115,10 @@ impl Interpreter {
         for table in &self.schema.tables {
             // Check for duplicate tables
             if !table_names.insert(&table.name) {
-                errors.push(ValidationError::DuplicateTable(table.name.clone()));
+                errors.push(ValidationError::DuplicateTable {
+                    name: table.name.clone(),
+                    span: table.span,
+                });
                 continue;
             }
             
@@ -85,18 +129,13 @@ impl Interpreter {
                     errors.push(ValidationError::DuplicateColumn {
                         table: table.name.clone(),
                         column: column.name.clone(),
+                        span: column.span,
                     });
                 }
             }
             
-            // Check for multiple primary keys
-            let pk_count = table.columns.iter()
-                .filter(|c| c.is_primary_key())
-                .count();
-            
-            if pk_count > 1 {
-                errors.push(ValidationError::MultiplePrimaryKeys(table.name.clone()));
-            }
+            // Note: Multiple primary keys are allowed (composite primary keys)
+            // where multiple columns together form the primary key
         }
         
         if errors.is_empty() {
@@ -117,7 +156,10 @@ impl Interpreter {
             let from_table = match table_map.get(&rel.from_table) {
                 Some(t) => t,
                 None => {
-                    errors.push(ValidationError::TableNotFound(rel.from_table.clone()));
+                    errors.push(ValidationError::TableNotFound {
+                        name: rel.from_table.clone(),
+                        span: rel.span,
+                    });
                     continue;
                 }
             };
@@ -125,7 +167,10 @@ impl Interpreter {
             let to_table = match table_map.get(&rel.to_table) {
                 Some(t) => t,
                 None => {
-                    errors.push(ValidationError::TableNotFound(rel.to_table.clone()));
+                    errors.push(ValidationError::TableNotFound {
+                        name: rel.to_table.clone(),
+                        span: rel.span,
+                    });
                     continue;
                 }
             };
@@ -135,6 +180,7 @@ impl Interpreter {
                 errors.push(ValidationError::ColumnNotFound {
                     table: rel.from_table.clone(),
                     column: rel.from_field.clone(),
+                    span: rel.span,
                 });
             }
             
@@ -142,6 +188,7 @@ impl Interpreter {
                 errors.push(ValidationError::ColumnNotFound {
                     table: rel.to_table.clone(),
                     column: rel.to_field.clone(),
+                    span: rel.span,
                 });
             }
         }

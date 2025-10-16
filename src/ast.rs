@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::lexer::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schema {
@@ -21,6 +22,7 @@ impl Schema {
 pub struct Table {
     pub name: String,
     pub columns: Vec<Column>,
+    pub span: Option<Span>,
 }
 
 impl Table {
@@ -28,6 +30,15 @@ impl Table {
         Table {
             name,
             columns: Vec::new(),
+            span: None,
+        }
+    }
+    
+    pub fn with_span(name: String, span: Span) -> Self {
+        Table {
+            name,
+            columns: Vec::new(),
+            span: Some(span),
         }
     }
 }
@@ -37,6 +48,7 @@ pub struct Column {
     pub name: String,
     pub datatype: DataType,
     pub attributes: Vec<Attribute>,
+    pub span: Option<Span>,
 }
 
 impl Column {
@@ -45,6 +57,16 @@ impl Column {
             name,
             datatype,
             attributes: Vec::new(),
+            span: None,
+        }
+    }
+    
+    pub fn with_span(name: String, datatype: DataType, span: Span) -> Self {
+        Column {
+            name,
+            datatype,
+            attributes: Vec::new(),
+            span: Some(span),
         }
     }
     
@@ -172,9 +194,10 @@ pub struct Relationship {
     pub to_table: String,
     pub to_field: String,
     pub relationship_type: RelationshipType,
+    pub span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RelationshipType {
     OneToMany,      // >
     ManyToOne,      // <

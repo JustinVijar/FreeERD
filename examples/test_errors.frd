@@ -1,0 +1,13 @@
+title "Test Error Messages"
+
+table Users {
+  id: int [pk],
+  name: str,
+  id: int
+}
+
+table Users {
+  email: str
+}
+
+Users.id > Posts.user_id

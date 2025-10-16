@@ -5,13 +5,28 @@ mod interpreter;
 mod svg_generator;
 
 use parser::Parser;
-use interpreter::Interpreter;
+use crate::interpreter::Interpreter;
 use svg_generator::SvgGenerator;
 use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
-    println!("🎨 FreeERD Interpreter v0.1.0");
+    let quote = get_random_quote();
+    println!("{}", r#"
+/$$$$$$$$                            /$$$$$$$$ /$$$$$$$  /$$$$$$$ 
+| $$_____/                           | $$_____/| $$__  $$| $$__  $$
+| $$     /$$$$$$   /$$$$$$   /$$$$$$ | $$      | $$  \ $$| $$  \ $$
+| $$$$$ /$$__  $$ /$$__  $$ /$$__  $$| $$$$$   | $$$$$$$/| $$  | $$
+| $$__/| $$  \__/| $$$$$$$$| $$$$$$$$| $$__/   | $$__  $$| $$  | $$
+| $$   | $$      | $$_____/| $$_____/| $$      | $$  \ $$| $$  | $$
+| $$   | $$      |  $$$$$$$|  $$$$$$$| $$$$$$$$| $$  | $$| $$$$$$$/
+|__/   |__/       \_______/ \_______/|________/|__/  |__/|_______/ 
+Version 0.1.0 Beta    
+    "#);
+    if let Some(q) = quote {
+        println!("  {}", q);
+    }
     println!("{}", "=".repeat(60));
     
     let args: Vec<String> = std::env::args().collect();
@@ -24,56 +39,70 @@ fn main() {
     let command = &args[1];
     
     match command.as_str() {
-        "parse" | "run" | "validate" => {
-            if args.len() < 3 {
-                eprintln!("❌ Error: Missing file path");
-                print_usage();
-                return;
-            }
-            
-            let file_path = &args[2];
-            
-            if let Err(e) = process_file(file_path, command) {
-                eprintln!("❌ Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        "svg" | "export" => {
-            if args.len() < 3 {
-                eprintln!("❌ Error: Missing file path");
-                print_usage();
-                return;
-            }
-            
-            let file_path = &args[2];
-            let output_path = if args.len() > 3 {
-                args[3].clone()
-            } else {
-                // Generate output filename from input
-                let path = Path::new(file_path);
-                let stem = path.file_stem().unwrap().to_str().unwrap();
-                format!("{}.svg", stem)
-            };
-            
-            if let Err(e) = export_svg(file_path, &output_path) {
-                eprintln!("❌ Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        "example" => {
-            run_example();
-        }
         "help" | "--help" | "-h" => {
             print_help();
         }
+        "check" => {
+            if args.len() < 3 {
+                eprintln!("❌ Error: Missing file path");
+                eprintln!("Usage: free-erd check <file>");
+                std::process::exit(1);
+            }
+            
+            let file_path = &args[2];
+            
+            if let Err(e) = check_file(file_path) {
+                eprintln!("❌ Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        "run" => {
+            if args.len() < 4 {
+                eprintln!("❌ Error: Missing arguments");
+                eprintln!("Usage: free-erd run <file> <command> [output]");
+                eprintln!("\nAvailable commands:");
+                eprintln!("  svg - Generate SVG diagram");
+                std::process::exit(1);
+            }
+            
+            let file_path = &args[2];
+            let subcommand = &args[3];
+            
+            match subcommand.as_str() {
+                "svg" => {
+                    let output_path = if args.len() > 4 {
+                        args[4].clone()
+                    } else {
+                        // Generate output filename from input
+                        let path = Path::new(file_path);
+                        let stem = path.file_stem().unwrap().to_str().unwrap();
+                        format!("{}.svg", stem)
+                    };
+                    
+                    if let Err(e) = export_svg(file_path, &output_path) {
+                        eprintln!("❌ Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                _ => {
+                    eprintln!("❌ Unknown run command: {}", subcommand);
+                    eprintln!("Available commands: svg");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "about" => {
+            print_about();
+        }
         _ => {
             eprintln!("❌ Unknown command: {}", command);
-            print_usage();
+            eprintln!("Run 'free-erd help' for usage information.");
+            std::process::exit(1);
         }
     }
 }
 
-fn process_file(file_path: &str, command: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn check_file(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let path = Path::new(file_path);
     
     if !path.exists() {
@@ -85,54 +114,37 @@ fn process_file(file_path: &str, command: &str) -> Result<(), Box<dyn std::error
     
     println!("🔍 Parsing...");
     let mut parser = Parser::new(&content);
-    let schema = parser.parse()?;
-    
+    let schema = match parser.parse() {
+        Ok(s) => s,
+        Err(e) => {
+            eprint!("\n{}", e.format_with_source(&content, file_path));
+            return Err(e.into());
+        }
+    };
     println!("✅ Parsing successful!\n");
     
     let interpreter = Interpreter::new(schema);
     
-    match command {
-        "validate" => {
-            println!("🔍 Validating schema...");
-            match interpreter.validate() {
-                Ok(_) => {
-                    println!("✅ Schema is valid!\n");
-                    let stats = interpreter.get_statistics();
-                    stats.print();
-                }
-                Err(errors) => {
-                    println!("❌ Validation failed with {} error(s):\n", errors.len());
-                    for (i, error) in errors.iter().enumerate() {
-                        println!("  {}. {}", i + 1, error);
-                    }
-                    return Err("Validation failed".into());
-                }
-            }
+    println!("🔍 Validating schema...");
+    match interpreter.validate() {
+        Ok(_) => {
+            println!("✅ Schema is valid!\n");
+            let stats = interpreter.get_statistics();
+            stats.print();
         }
-        _ => {
-            // For "parse" and "run", just validate and display
-            match interpreter.validate() {
-                Ok(_) => {
-                    interpreter.print_schema();
-                    let stats = interpreter.get_statistics();
-                    stats.print();
-                }
-                Err(errors) => {
-                    println!("⚠️  Found {} validation error(s):\n", errors.len());
-                    for (i, error) in errors.iter().enumerate() {
-                        println!("  {}. {}", i + 1, error);
-                    }
-                    println!("\n📊 Displaying schema anyway...\n");
-                    interpreter.print_schema();
-                }
+        Err(errors) => {
+            eprintln!("\n\x1b[1;31m❌ Validation failed with {} error(s):\x1b[0m\n", errors.len());
+            for error in errors.iter() {
+                eprint!("{}", error.format_with_source(&content, file_path));
             }
+            return Err("Validation failed".into());
         }
     }
     
     Ok(())
 }
 
-fn run_example() {
+fn run_example() -> Result<(), Box<dyn std::error::Error>> {
     let example = r#"title "E-Commerce Database"
 
 table Users {
@@ -176,28 +188,31 @@ Products.id > OrderItems.product_id
     println!("\n{}", "=".repeat(60));
     
     let mut parser = Parser::new(example);
-    match parser.parse() {
-        Ok(schema) => {
-            let interpreter = Interpreter::new(schema);
-            
-            match interpreter.validate() {
-                Ok(_) => {
-                    interpreter.print_schema();
-                    let stats = interpreter.get_statistics();
-                    stats.print();
-                }
-                Err(errors) => {
-                    println!("❌ Validation errors:");
-                    for error in errors {
-                        println!("  • {}", error);
-                    }
-                }
+    let schema = match parser.parse() {
+        Ok(s) => s,
+        Err(e) => {
+            eprint!("\n{}", e.format_with_source(example, "example"));
+            return Err(e.into());
+        }
+    };
+    
+    let interpreter = Interpreter::new(schema);
+    
+    match interpreter.validate() {
+        Ok(_) => {
+            interpreter.print_schema();
+            let stats = interpreter.get_statistics();
+            stats.print();
+        }
+        Err(errors) => {
+            println!("❌ Validation errors:");
+            for error in errors {
+                println!("  • {}", error);
             }
         }
-        Err(e) => {
-            eprintln!("❌ Parse error: {}", e);
-        }
     }
+    
+    Ok(())
 }
 
 fn export_svg(file_path: &str, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -212,7 +227,13 @@ fn export_svg(file_path: &str, output_path: &str) -> Result<(), Box<dyn std::err
     
     println!("🔍 Parsing...");
     let mut parser = Parser::new(&content);
-    let schema = parser.parse()?;
+    let schema = match parser.parse() {
+        Ok(s) => s,
+        Err(e) => {
+            eprint!("\n{}", e.format_with_source(&content, file_path));
+            return Err(e.into());
+        }
+    };
     
     println!("✅ Parsing successful!");
     
@@ -224,10 +245,13 @@ fn export_svg(file_path: &str, output_path: &str) -> Result<(), Box<dyn std::err
             println!("✅ Schema is valid!");
         }
         Err(errors) => {
-            println!("⚠️  Found {} validation error(s), continuing anyway...", errors.len());
-            for (i, error) in errors.iter().enumerate() {
-                println!("  {}. {}", i + 1, error);
+            eprintln!("\n\x1b[1;31m❌ Validation failed with {} error(s):\x1b[0m\n", errors.len());
+            for error in errors.iter() {
+                eprint!("{}", error.format_with_source(&content, file_path));
             }
+            eprintln!("\n\x1b[1;31m❌ Cannot generate SVG with validation errors.\x1b[0m");
+            eprintln!("\x1b[1;33m💡 Fix the errors above and try again.\x1b[0m\n");
+            return Err("Validation failed".into());
         }
     }
     
@@ -248,18 +272,12 @@ fn print_usage() {
     println!("\nUsage:");
     println!("  free-erd <command> [options]\n");
     println!("Commands:");
-    println!("  parse <file>              Parse and display a .frd file");
-    println!("  run <file>                Parse, validate, and display a .frd file");
-    println!("  validate <file>           Validate a .frd file schema");
-    println!("  svg <file> [output]       Generate SVG diagram (default: <file>.svg)");
-    println!("  export <file> [output]    Alias for svg command");
-    println!("  example                   Run with a built-in example");
-    println!("  help                      Show detailed help information\n");
-    println!("Note:");
-    println!("  SVG files can be converted to PNG using tools like:");
-    println!("  - inkscape: inkscape diagram.svg -o diagram.png");
-    println!("  - rsvg-convert: rsvg-convert -o diagram.png diagram.svg");
-    println!("  - imagemagick: convert diagram.svg diagram.png\n");
+    println!("  help                      Shows the help menu (this menu)");
+    println!("  check <file>              Checks the .frd file if there are errors");
+    println!("  run <file> <command> [output]  Runs the .frd file with specified command");
+    println!("  about                     Info about this program\n");
+    println!("run subcommands:");
+    println!("  svg                       Outputs an SVG file of the ERD\n");
 }
 
 fn print_help() {
@@ -268,19 +286,53 @@ fn print_help() {
     println!("and entity relationships in a simple, human-readable format.\n");
     
     print_usage();
+
+}
+
+fn print_about() {
+    println!("\n🎨 FreeERD - Free Entity Relationship Diagram Tool");
+    println!("Version: 0.1.0 Beta\n");
+    println!("Description:");
+    println!("  A lightweight, open-source tool for creating Entity Relationship Diagrams");
+    println!("  using a simple domain-specific language. FreeERD allows you to define");
+    println!("  database schemas in a human-readable format and generate beautiful SVG");
+    println!("  diagrams automatically.\n");
+    println!("Features:");
+    println!("  • Simple, intuitive syntax for defining tables and relationships");
+    println!("  • Comprehensive validation with detailed error messages");
+    println!("  • Automatic SVG diagram generation with smart layout");
+    println!("  • Support for various data types and column attributes");
+    println!("  • Multiple relationship types (1:1, 1:N, N:M)\n");
+    println!("License: GNU General Public License v2.0");
+    println!("  This program is free software; you can redistribute it and/or modify it");
+    println!("  under the terms of the GNU General Public License version 2 as published");
+    println!("  by the Free Software Foundation. This program is distributed in the hope");
+    println!("  that it will be useful, but WITHOUT ANY WARRANTY; without even the implied");
+    println!("  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.");
+    println!("  See the LICENSE file for more details.\n");
+    println!("Repository: https://github.com/yourusername/FreeERD");
+    println!("\nFor help and usage information, run: free-erd help\n");
+}
+
+fn get_random_quote() -> Option<String> {
+    // Embed quotes.txt content at compile time
+    const QUOTES: &str = include_str!("quotes.txt");
     
-    println!("Examples:");
-    println!("  free-erd example");
-    println!("  free-erd parse schema.frd");
-    println!("  free-erd validate database.frd");
-    println!("  free-erd svg schema.frd");
-    println!("  free-erd svg schema.frd diagram.svg\n");
+    let quotes: Vec<&str> = QUOTES
+        .lines()
+        .filter(|line| !line.trim().is_empty() && line.trim() != ".")
+        .collect();
     
-    println!("File Format:");
-    println!("  FreeERD files use the .frd extension and contain:");
-    println!("  • Title declarations");
-    println!("  • Table definitions with columns and attributes");
-    println!("  • Relationship definitions\n");
+    if quotes.is_empty() {
+        return None;
+    }
     
-    println!("For more information, see the README_FORAI.md file.\n");
+    // Use current time as seed for pseudo-random selection
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    let index = (seed as usize) % quotes.len();
+    Some(quotes[index].to_string())
 }

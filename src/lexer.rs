@@ -1,5 +1,30 @@
 use std::fmt;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Span {
+    pub line: usize,
+    pub column: usize,
+    pub length: usize,
+}
+
+impl Span {
+    pub fn new(line: usize, column: usize, length: usize) -> Self {
+        Span { line, column, length }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Spanned<T> {
+    pub value: T,
+    pub span: Span,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(value: T, span: Span) -> Self {
+        Spanned { value, span }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Keywords
@@ -64,6 +89,8 @@ pub struct Lexer {
     input: Vec<char>,
     position: usize,
     current_char: Option<char>,
+    line: usize,
+    column: usize,
 }
 
 impl Lexer {
@@ -74,12 +101,24 @@ impl Lexer {
             input: chars,
             position: 0,
             current_char,
+            line: 1,
+            column: 1,
         }
     }
     
     fn advance(&mut self) {
+        if let Some('\n') = self.current_char {
+            self.line += 1;
+            self.column = 1;
+        } else {
+            self.column += 1;
+        }
         self.position += 1;
         self.current_char = self.input.get(self.position).copied();
+    }
+    
+    fn current_span(&self, length: usize) -> Span {
+        Span::new(self.line, self.column, length)
     }
     
     fn peek(&self, offset: usize) -> Option<char> {
@@ -165,8 +204,9 @@ impl Lexer {
         result.trim().to_string()
     }
     
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Vec<Spanned<Token>> {
         let mut tokens = Vec::new();
+        let input_copy = self.input.clone(); // For extracting source text
         
         while let Some(ch) = self.current_char {
             match ch {
@@ -174,78 +214,107 @@ impl Lexer {
                     self.skip_whitespace();
                 }
                 '\n' => {
-                    tokens.push(Token::Newline);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::Newline, span));
                     self.advance();
                 }
                 '"' | '\'' => {
+                    let start_line = self.line;
+                    let start_col = self.column;
                     let string = self.read_string(ch);
-                    tokens.push(Token::String(string));
+                    let length = self.column - start_col;
+                    let span = Span::new(start_line, start_col, length);
+                    tokens.push(Spanned::new(Token::String(string), span));
                 }
                 ':' => {
-                    tokens.push(Token::Colon);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::Colon, span));
                     self.advance();
                 }
                 ',' => {
-                    tokens.push(Token::Comma);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::Comma, span));
                     self.advance();
                 }
                 '.' => {
-                    tokens.push(Token::Dot);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::Dot, span));
                     self.advance();
                 }
                 '{' => {
-                    tokens.push(Token::LeftBrace);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::LeftBrace, span));
                     self.advance();
                 }
                 '}' => {
-                    tokens.push(Token::RightBrace);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::RightBrace, span));
                     self.advance();
                 }
                 '[' => {
-                    tokens.push(Token::LeftBracket);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::LeftBracket, span));
                     self.advance();
                 }
                 ']' => {
-                    tokens.push(Token::RightBracket);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::RightBracket, span));
                     self.advance();
                 }
                 '=' => {
-                    tokens.push(Token::Equals);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::Equals, span));
                     self.advance();
                 }
                 '/' if self.peek(1) == Some('/') => {
+                    let start_line = self.line;
+                    let start_col = self.column;
                     let comment = self.read_comment();
-                    tokens.push(Token::Comment(comment));
+                    let length = self.column - start_col;
+                    let span = Span::new(start_line, start_col, length);
+                    tokens.push(Spanned::new(Token::Comment(comment), span));
                 }
                 '<' if self.peek(1) == Some('>') => {
-                    tokens.push(Token::ManyToMany);
+                    let span = self.current_span(2);
+                    tokens.push(Spanned::new(Token::ManyToMany, span));
                     self.advance();
                     self.advance();
                 }
                 '<' => {
-                    tokens.push(Token::ManyToOne);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::ManyToOne, span));
                     self.advance();
                 }
                 '>' => {
-                    tokens.push(Token::OneToMany);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::OneToMany, span));
                     self.advance();
                 }
                 '-' if !self.peek(1).map(|c| c.is_numeric()).unwrap_or(false) => {
-                    tokens.push(Token::OneToOne);
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::OneToOne, span));
                     self.advance();
                 }
                 _ if ch.is_numeric() || (ch == '-' && self.peek(1).map(|c| c.is_numeric()).unwrap_or(false)) => {
+                    let start_line = self.line;
+                    let start_col = self.column;
                     let num = self.read_number();
-                    tokens.push(Token::Number(num));
+                    let length = self.column - start_col;
+                    let span = Span::new(start_line, start_col, length);
+                    tokens.push(Spanned::new(Token::Number(num), span));
                 }
                 _ if ch.is_alphabetic() || ch == '_' => {
+                    let start_line = self.line;
+                    let start_col = self.column;
                     let ident = self.read_identifier();
+                    let length = self.column - start_col;
+                    let span = Span::new(start_line, start_col, length);
                     let token = match ident.to_lowercase().as_str() {
                         "title" => Token::Title,
                         "table" => Token::Table,
                         _ => Token::Identifier(ident),
                     };
-                    tokens.push(token);
+                    tokens.push(Spanned::new(token, span));
                 }
                 _ => {
                     // Unknown character, skip it
@@ -254,7 +323,8 @@ impl Lexer {
             }
         }
         
-        tokens.push(Token::Eof);
+        let span = self.current_span(0);
+        tokens.push(Spanned::new(Token::Eof, span));
         tokens
     }
 }
@@ -269,8 +339,8 @@ mod tests {
         let mut lexer = Lexer::new(input);
         let tokens = lexer.tokenize();
         
-        assert_eq!(tokens[0], Token::Title);
-        assert_eq!(tokens[1], Token::String("My ERD".to_string()));
+        assert_eq!(tokens[0].value, Token::Title);
+        assert_eq!(tokens[1].value, Token::String("My ERD".to_string()));
     }
     
     #[test]
@@ -279,8 +349,8 @@ mod tests {
         let mut lexer = Lexer::new(input);
         let tokens = lexer.tokenize();
         
-        assert_eq!(tokens[0], Token::Table);
-        assert_eq!(tokens[1], Token::Identifier("Products".to_string()));
-        assert_eq!(tokens[2], Token::LeftBrace);
+        assert_eq!(tokens[0].value, Token::Table);
+        assert_eq!(tokens[1].value, Token::Identifier("Products".to_string()));
+        assert_eq!(tokens[2].value, Token::LeftBrace);
     }
 }

@@ -1,0 +1,160 @@
+title "Point of Sales System"
+
+table Customers {
+  id: int [pk, autoincrement],
+  first_name: str,
+  last_name: str,
+  email: str [unique],
+  phone: str,
+  address: str [nullable],
+  city: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+table Categories {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable],
+  parent_id: int [fk, nullable]
+}
+
+table Products {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable],
+  sku: str [unique],
+  category_id: int [fk],
+  price: float,
+  cost: float,
+  stock_quantity: int [default=0],
+  min_stock_level: int [default=5],
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW],
+  updated_at: datetime [default=NOW]
+}
+
+table Suppliers {
+  id: int [pk, autoincrement],
+  company_name: str [unique],
+  contact_name: str,
+  email: str [unique],
+  phone: str,
+  address: str,
+  city: str,
+  country: str
+}
+
+table ProductSuppliers {
+  product_id: int [pk, fk],
+  supplier_id: int [pk, fk],
+  supplier_price: float,
+  lead_time_days: int [default=7],
+  created_at: datetime [default=NOW]
+}
+
+table Employees {
+  id: int [pk, autoincrement],
+  employee_code: str [unique],
+  first_name: str,
+  last_name: str,
+  email: str [unique],
+  phone: str,
+  role: str [default="cashier"],
+  salary: float [nullable],
+  hire_date: date [default=NOW],
+  is_active: bool [default=TRUE]
+}
+
+table Sales {
+  id: int [pk, autoincrement],
+  sale_number: str [unique],
+  customer_id: int [fk, nullable],
+  employee_id: int [fk],
+  sale_date: datetime [default=NOW],
+  subtotal: float,
+  tax_amount: float,
+  discount_amount: float [default=0],
+  total_amount: float,
+  payment_method: str [default="cash"],
+  status: str [default="completed"]
+}
+
+table SaleItems {
+  id: int [pk, autoincrement],
+  sale_id: int [fk],
+  product_id: int [fk],
+  quantity: int,
+  unit_price: float,
+  discount_percent: float [default=0],
+  line_total: float
+}
+
+table Inventory {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  transaction_type: str,
+  quantity_change: int,
+  reference_id: int [nullable],
+  notes: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+table Promotions {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable],
+  discount_type: str,
+  discount_value: float,
+  start_date: date,
+  end_date: date,
+  is_active: bool [default=TRUE]
+}
+
+table ProductPromotions {
+  product_id: int [pk, fk],
+  promotion_id: int [pk, fk],
+  created_at: datetime [default=NOW]
+}
+
+table Profiles {
+  id: int [pk, autoincrement],
+  customer_id: int [unique, fk],
+  bio: str [nullable],
+  avatar_url: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+// Category relationships (self-referencing)
+Categories.parent_id > Categories.id
+
+// Product relationships
+Categories.id > Products.category_id
+Products.id > SaleItems.product_id
+Products.id > Inventory.product_id
+Products.id > ProductSuppliers.product_id
+Products.id > ProductPromotions.product_id
+
+// Supplier relationships
+Suppliers.id > ProductSuppliers.supplier_id
+
+// Customer relationships
+Customers.id > Sales.customer_id
+
+// Employee relationships
+Employees.id > Sales.employee_id
+
+// Sales relationships
+Sales.id > SaleItems.sale_id
+
+// Promotion relationships
+Promotions.id > ProductPromotions.promotion_id
+
+// One-to-one relationship (test dashed line)
+Customers.id - Profiles.customer_id
+
+// Many-to-one relationships (test < operator) - now with proper connection point distribution
+SaleItems.product_id < Products.id
+Sales.customer_id < Customers.id
+
+// Many-to-many relationship (test <> operator)
+Products.id <> Suppliers.id

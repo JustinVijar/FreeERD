@@ -1,0 +1,101 @@
+title "Composite Primary Keys Examples"
+
+// Example 1: Many-to-Many Relationship (Junction Table)
+// Students can enroll in multiple courses, courses have multiple students
+table Students {
+  student_id: int [pk, autoincrement],
+  name: str,
+  email: str [unique]
+}
+
+table Courses {
+  course_id: int [pk, autoincrement],
+  course_name: str,
+  credits: int
+}
+
+// Junction table with composite primary key
+table Enrollments {
+  student_id: int [pk, fk],
+  course_id: int [pk, fk],
+  enrollment_date: date,
+  grade: str
+}
+
+// Example 2: Product-Supplier Relationship
+// Products can have multiple suppliers, suppliers can supply multiple products
+table Products {
+  product_id: int [pk, autoincrement],
+  product_name: str,
+  category: str
+}
+
+table Suppliers {
+  supplier_id: int [pk, autoincrement],
+  supplier_name: str,
+  country: str
+}
+
+// Junction table with composite key and additional attributes
+table ProductSuppliers {
+  product_id: int [pk, fk],
+  supplier_id: int [pk, fk],
+  unit_price: float,
+  lead_time_days: int,
+  minimum_order: int
+}
+
+// Example 3: Time-Series Data with Composite Key
+// Track product prices over time
+table ProductPrices {
+  product_id: int [pk, fk],
+  effective_date: date [pk],
+  price: float,
+  currency: str [default=USD]
+}
+
+// Example 4: Multi-Location Inventory
+// Track inventory across multiple warehouses
+table Warehouses {
+  warehouse_id: int [pk, autoincrement],
+  location: str,
+  capacity: int
+}
+
+table Inventory {
+  product_id: int [pk, fk],
+  warehouse_id: int [pk, fk],
+  quantity: int,
+  last_updated: datetime
+}
+
+// Example 5: Order Line Items
+// Each order can have multiple products
+table Orders {
+  order_id: int [pk, autoincrement],
+  customer_name: str,
+  order_date: date
+}
+
+table OrderItems {
+  order_id: int [pk, fk],
+  line_number: int [pk],
+  product_id: int [fk],
+  quantity: int,
+  unit_price: float
+}
+
+// Relationships
+Students.student_id > Enrollments.student_id
+Courses.course_id > Enrollments.course_id
+
+Products.product_id > ProductSuppliers.product_id
+Suppliers.supplier_id > ProductSuppliers.supplier_id
+
+Products.product_id > ProductPrices.product_id
+
+Products.product_id > Inventory.product_id
+Warehouses.warehouse_id > Inventory.warehouse_id
+
+Orders.order_id > OrderItems.order_id
+Products.product_id > OrderItems.product_id
