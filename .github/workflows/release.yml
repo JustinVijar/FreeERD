@@ -46,13 +46,19 @@ jobs:
 
       - name: Strip binary (Linux and macOS)
         if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }} || true
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} release/${{ matrix.asset_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.asset_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          path: release/${{ matrix.asset_name }}
 
   release:
     name: Create Release
@@ -69,10 +75,19 @@ jobs:
         with:
           path: ./artifacts
 
+      - name: List artifacts
+        run: ls -R ./artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find ./artifacts -type f -exec cp {} release-files/ \;
+          ls -la release-files/
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./artifacts/**/*
+          files: release-files/*
           draft: false
           prerelease: false
           generate_release_notes: true
