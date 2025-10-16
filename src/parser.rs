@@ -4,15 +4,12 @@ use crate::lexer::{Lexer, Token, Spanned, Span};
 pub struct Parser {
     tokens: Vec<Spanned<Token>>,
     position: usize,
-    source: String,
 }
 
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken { expected: String, found: Token, span: Span },
-    UnexpectedEof { span: Span },
     InvalidAttribute { name: String, span: Span },
-    InvalidRelationship { msg: String, span: Span },
 }
 
 impl std::fmt::Display for ParseError {
@@ -21,9 +18,7 @@ impl std::fmt::Display for ParseError {
             ParseError::UnexpectedToken { expected, found, .. } => {
                 write!(f, "Expected {}, but found {}", expected, found)
             }
-            ParseError::UnexpectedEof { .. } => write!(f, "Unexpected end of file"),
             ParseError::InvalidAttribute { name, .. } => write!(f, "Invalid attribute: {}", name),
-            ParseError::InvalidRelationship { msg, .. } => write!(f, "Invalid relationship: {}", msg),
         }
     }
 }
@@ -32,9 +27,7 @@ impl ParseError {
     pub fn span(&self) -> Span {
         match self {
             ParseError::UnexpectedToken { span, .. } => *span,
-            ParseError::UnexpectedEof { span } => *span,
             ParseError::InvalidAttribute { span, .. } => *span,
-            ParseError::InvalidRelationship { span, .. } => *span,
         }
     }
     
@@ -75,12 +68,7 @@ impl Parser {
         Parser {
             tokens,
             position: 0,
-            source: input.to_string(),
         }
-    }
-    
-    pub fn source(&self) -> &str {
-        &self.source
     }
     
     fn current_token(&self) -> &Token {
@@ -89,10 +77,6 @@ impl Parser {
     
     fn current_span(&self) -> Span {
         self.tokens.get(self.position).map(|t| t.span).unwrap_or(Span::new(0, 0, 0))
-    }
-    
-    fn peek_token(&self, offset: usize) -> &Token {
-        self.tokens.get(self.position + offset).map(|t| &t.value).unwrap_or(&Token::Eof)
     }
     
     fn advance(&mut self) {
@@ -183,7 +167,6 @@ impl Parser {
     }
     
     fn parse_table(&mut self) -> Result<Table, ParseError> {
-        let table_start_span = self.current_span();
         self.expect_token(Token::Table)?;
         self.skip_newlines();
         

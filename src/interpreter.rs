@@ -12,7 +12,6 @@ pub enum ValidationError {
     DuplicateColumn { table: String, column: String, span: Option<Span> },
     TableNotFound { name: String, span: Option<Span> },
     ColumnNotFound { table: String, column: String, span: Option<Span> },
-    InvalidRelationship { msg: String, span: Option<Span> },
 }
 
 impl std::fmt::Display for ValidationError {
@@ -30,9 +29,6 @@ impl std::fmt::Display for ValidationError {
             ValidationError::ColumnNotFound { table, column, .. } => {
                 write!(f, "Column '{}' not found in table '{}'", column, table)
             }
-            ValidationError::InvalidRelationship { msg, .. } => {
-                write!(f, "Invalid relationship: {}", msg)
-            }
         }
     }
 }
@@ -44,7 +40,6 @@ impl ValidationError {
             ValidationError::DuplicateColumn { span, .. } => *span,
             ValidationError::TableNotFound { span, .. } => *span,
             ValidationError::ColumnNotFound { span, .. } => *span,
-            ValidationError::InvalidRelationship { span, .. } => *span,
         }
     }
     
@@ -198,50 +193,6 @@ impl Interpreter {
         } else {
             Err(errors)
         }
-    }
-    
-    pub fn print_schema(&self) {
-        if let Some(title) = &self.schema.title {
-            println!("📊 ERD: {}", title);
-            println!("{}", "=".repeat(60));
-        }
-        
-        println!("\n📋 Tables:");
-        for table in &self.schema.tables {
-            println!("\n  ┌─ Table: {}", table.name);
-            for column in &table.columns {
-                let attrs = if column.attributes.is_empty() {
-                    String::new()
-                } else {
-                    format!(" [{}]", 
-                        column.attributes.iter()
-                            .map(|a| format!("{}", a))
-                            .collect::<Vec<_>>()
-                            .join(", "))
-                };
-                println!("  │  • {}: {}{}", column.name, column.datatype, attrs);
-            }
-            println!("  └─");
-        }
-        
-        if !self.schema.relationships.is_empty() {
-            println!("\n🔗 Relationships:");
-            for rel in &self.schema.relationships {
-                let arrow = match rel.relationship_type {
-                    RelationshipType::OneToMany => "──>",
-                    RelationshipType::ManyToOne => "<──",
-                    RelationshipType::ManyToMany => "<─>",
-                    RelationshipType::OneToOne => "───",
-                };
-                println!("  {}.{} {} {}.{} ({})",
-                    rel.from_table, rel.from_field,
-                    arrow,
-                    rel.to_table, rel.to_field,
-                    rel.relationship_type);
-            }
-        }
-        
-        println!();
     }
     
     pub fn get_statistics(&self) -> SchemaStatistics {

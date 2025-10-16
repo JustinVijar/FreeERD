@@ -26,14 +26,6 @@ pub struct Table {
 }
 
 impl Table {
-    pub fn new(name: String) -> Self {
-        Table {
-            name,
-            columns: Vec::new(),
-            span: None,
-        }
-    }
-    
     pub fn with_span(name: String, span: Span) -> Self {
         Table {
             name,
@@ -52,15 +44,6 @@ pub struct Column {
 }
 
 impl Column {
-    pub fn new(name: String, datatype: DataType) -> Self {
-        Column {
-            name,
-            datatype,
-            attributes: Vec::new(),
-            span: None,
-        }
-    }
-    
     pub fn with_span(name: String, datatype: DataType, span: Span) -> Self {
         Column {
             name,
@@ -76,14 +59,6 @@ impl Column {
     
     pub fn is_foreign_key(&self) -> bool {
         self.attributes.iter().any(|a| matches!(a, Attribute::ForeignKey))
-    }
-    
-    pub fn is_unique(&self) -> bool {
-        self.attributes.iter().any(|a| matches!(a, Attribute::Unique))
-    }
-    
-    pub fn is_nullable(&self) -> bool {
-        self.attributes.iter().any(|a| matches!(a, Attribute::Nullable))
     }
 }
 

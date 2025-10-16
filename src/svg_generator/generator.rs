@@ -1,4 +1,4 @@
-use crate::ast::{Schema, Table, Relationship, RelationshipType};
+use crate::ast::{Schema, Relationship, RelationshipType};
 use super::layout::{LayoutEngine, Point, ConnectionSide};
 use super::renderer::SvgRenderer;
 
@@ -13,11 +13,6 @@ impl SvgGenerator {
             schema,
             layout_engine: LayoutEngine::new(),
         }
-    }
-
-    pub fn generate(&self) -> String {
-        let mut generator = self.clone();
-        generator.generate_internal()
     }
 
     pub fn generate_with_defs(&self) -> String {
@@ -70,158 +65,6 @@ impl SvgGenerator {
         renderer.get_content().to_string()
     }
 
-    fn render_relationship_lines(&self, renderer: &mut SvgRenderer) {
-        for relationship in &self.schema.relationships {
-            self.render_relationship_line_only(renderer, relationship);
-        }
-    }
-    
-    fn render_relationship_boxes(&self, renderer: &mut SvgRenderer) {
-        for relationship in &self.schema.relationships {
-            self.render_relationship_box_only(renderer, relationship);
-        }
-    }
-    
-    fn render_relationships(&self, renderer: &mut SvgRenderer) {
-        for relationship in &self.schema.relationships {
-            self.render_single_relationship(renderer, relationship);
-        }
-    }
-
-    fn render_single_relationship(&self, renderer: &mut SvgRenderer, relationship: &Relationship) {
-        // Find source and target table layouts
-        let source_layout = match self.layout_engine.find_table_layout(&relationship.from_table) {
-            Some(layout) => layout,
-            None => {
-                eprintln!("Warning: Source table '{}' not found", relationship.from_table);
-                return;
-            }
-        };
-
-        let target_layout = match self.layout_engine.find_table_layout(&relationship.to_table) {
-            Some(layout) => layout,
-            None => {
-                eprintln!("Warning: Target table '{}' not found", relationship.to_table);
-                return;
-            }
-        };
-
-        // Determine connection points
-        let (start_point, end_point) = self.calculate_connection_points(
-            source_layout, 
-            target_layout, 
-            &relationship.from_field,
-            &relationship.to_field
-        );
-
-        // Check if this is a self-referencing relationship
-        let is_self_referencing = relationship.from_table == relationship.to_table;
-        
-        let path = if is_self_referencing {
-            // Use curved path for self-referencing relationships
-            self.layout_engine.get_self_referencing_curve(&source_layout.bounds)
-        } else {
-            // Use simple straight line (no collision avoidance)
-            vec![start_point, end_point]
-        };
-
-        // For self-referencing relationships, render the line first
-        if relationship.from_table == relationship.to_table {
-            renderer.render_relationship_line(&path, relationship.relationship_type);
-        }
-        
-        // Render relationship with appropriate method (segments for regular, line+box for self-referencing)
-        renderer.render_relationship_tape_label(
-            &relationship.from_table,
-            &relationship.from_field,
-            &relationship.to_table,
-            &relationship.to_field,
-            relationship.relationship_type,
-            &path
-        );
-    }
-
-    fn render_relationship_line_only(&self, renderer: &mut SvgRenderer, relationship: &Relationship) {
-        // Find source and target table layouts
-        let source_layout = match self.layout_engine.find_table_layout(&relationship.from_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        let target_layout = match self.layout_engine.find_table_layout(&relationship.to_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        // Calculate connection points
-        let (start_point, end_point) = self.calculate_connection_points(
-            source_layout, target_layout, &relationship.from_field, &relationship.to_field
-        );
-
-        let is_self_referencing = relationship.from_table == relationship.to_table;
-        
-        let path = if is_self_referencing {
-            // Use curved path for self-referencing relationships
-            self.layout_engine.get_self_referencing_curve(&source_layout.bounds)
-        } else {
-            // Use simple straight line
-            vec![start_point, end_point]
-        };
-
-        // Render ONLY the line (for self-referencing) or line segments (for regular relationships)
-        if is_self_referencing {
-            renderer.render_relationship_line(&path, relationship.relationship_type);
-        } else {
-            // For regular relationships, render the line segments only
-            renderer.render_relationship_line_segments_only(
-                &relationship.from_table,
-                &relationship.from_field,
-                &relationship.to_table,
-                &relationship.to_field,
-                relationship.relationship_type,
-                &path
-            );
-        }
-    }
-    
-    fn render_relationship_box_only(&self, renderer: &mut SvgRenderer, relationship: &Relationship) {
-        // Find source and target table layouts
-        let source_layout = match self.layout_engine.find_table_layout(&relationship.from_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        let target_layout = match self.layout_engine.find_table_layout(&relationship.to_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        // Calculate connection points
-        let (start_point, end_point) = self.calculate_connection_points(
-            source_layout, target_layout, &relationship.from_field, &relationship.to_field
-        );
-
-        let is_self_referencing = relationship.from_table == relationship.to_table;
-        
-        let path = if is_self_referencing {
-            // Use curved path for self-referencing relationships
-            self.layout_engine.get_self_referencing_curve(&source_layout.bounds)
-        } else {
-            // Use simple straight line
-            vec![start_point, end_point]
-        };
-
-        // Render ONLY the relationship box
-        renderer.render_relationship_box_only(
-            &relationship.from_table,
-            &relationship.from_field,
-            &relationship.to_table,
-            &relationship.to_field,
-            relationship.relationship_type,
-            &path
-        );
-    }
-    
     fn create_relationship_boxes(&self, renderer: &mut SvgRenderer) {
         let mut existing_boxes: Vec<super::layout::Rectangle> = Vec::new();
         
@@ -505,14 +348,6 @@ impl SvgGenerator {
     }
 
 
-    pub fn get_canvas_size(&self) -> (f64, f64) {
-        (self.layout_engine.canvas_width, self.layout_engine.canvas_height)
-    }
-
-    pub fn set_canvas_size(&mut self, width: f64, height: f64) {
-        self.layout_engine.canvas_width = width;
-        self.layout_engine.canvas_height = height;
-    }
 }
 
 impl Clone for SvgGenerator {

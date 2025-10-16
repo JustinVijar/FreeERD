@@ -206,7 +206,6 @@ impl Lexer {
     
     pub fn tokenize(&mut self) -> Vec<Spanned<Token>> {
         let mut tokens = Vec::new();
-        let input_copy = self.input.clone(); // For extracting source text
         
         while let Some(ch) = self.current_char {
             match ch {

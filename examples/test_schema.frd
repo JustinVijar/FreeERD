@@ -1,4 +1,4 @@
-title "Point of Sales System"
+title "Point of Sales System - All Relationship Types"
 
 table Customers {
   id: int [pk, autoincrement],
@@ -124,37 +124,36 @@ table Profiles {
   created_at: datetime [default=NOW]
 }
 
-// Category relationships (self-referencing)
-Categories.parent_id > Categories.id
+// ============================================
+// RELATIONSHIP EXAMPLES - ALL 4 OPERATORS
+// ============================================
 
-// Product relationships
+// ONE-TO-ONE (-): Each customer has exactly one profile
+Customers.id - Profiles.customer_id
+
+// ONE-TO-MANY (>): One category has many products
 Categories.id > Products.category_id
+
+// MANY-TO-ONE (<): Many sales belong to one customer
+Sales.customer_id < Customers.id
+
+// MANY-TO-MANY (<>): Products can have multiple suppliers, suppliers can supply multiple products
+Products.id <> Suppliers.id
+
+// ============================================
+// ADDITIONAL RELATIONSHIPS
+// ============================================
+
+// One-to-many relationships
+Customers.id > Sales.customer_id
+Employees.id > Sales.employee_id
+Sales.id > SaleItems.sale_id
 Products.id > SaleItems.product_id
 Products.id > Inventory.product_id
 Products.id > ProductSuppliers.product_id
+Suppliers.id > ProductSuppliers.supplier_id
+Promotions.id > ProductPromotions.promotion_id
 Products.id > ProductPromotions.product_id
 
-// Supplier relationships
-Suppliers.id > ProductSuppliers.supplier_id
-
-// Customer relationships
-Customers.id > Sales.customer_id
-
-// Employee relationships
-Employees.id > Sales.employee_id
-
-// Sales relationships
-Sales.id > SaleItems.sale_id
-
-// Promotion relationships
-Promotions.id > ProductPromotions.promotion_id
-
-// One-to-one relationship (test dashed line)
-Customers.id - Profiles.customer_id
-
-// Many-to-one relationships (test < operator) - now with proper connection point distribution
-SaleItems.product_id < Products.id
-Sales.customer_id < Customers.id
-
-// Many-to-many relationship (test <> operator)
-Products.id <> Suppliers.id
+// Self-referencing (category hierarchy)
+Categories.parent_id > Categories.id
