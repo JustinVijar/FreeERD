@@ -11,6 +11,8 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const VERSION: &str = "0.1.1 BETA";
+
 fn main() {
     let quote = get_random_quote();
     println!("{}", r#"
@@ -22,8 +24,8 @@ fn main() {
 | $$   | $$      | $$_____/| $$_____/| $$      | $$  \ $$| $$  | $$
 | $$   | $$      |  $$$$$$$|  $$$$$$$| $$$$$$$$| $$  | $$| $$$$$$$/
 |__/   |__/       \_______/ \_______/|________/|__/  |__/|_______/ 
-Version 0.1.0 Beta    
     "#);
+    println!("Version {}", VERSION);
     if let Some(q) = quote {
         println!("  {}", q);
     }
@@ -220,7 +222,7 @@ fn print_help() {
 
 fn print_about() {
     println!("\n🎨 FreeERD - Free Entity Relationship Diagram Tool");
-    println!("Version: 0.1.0 Beta\n");
+    println!("Version: {}\n", VERSION);
     println!("Description:");
     println!("  A lightweight, open-source tool for creating Entity Relationship Diagrams");
     println!("  using a simple domain-specific language. FreeERD allows you to define");
