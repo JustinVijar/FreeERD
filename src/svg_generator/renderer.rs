@@ -355,6 +355,114 @@ impl SvgRenderer {
         ));
     }
 
+    fn line_intersects_obstacles(&self, start: Point, end: Point) -> bool {
+        // Check if line intersects any table
+        for table_rect in &self.table_layouts {
+            if self.line_intersects_rect(start, end, table_rect) {
+                return true;
+            }
+        }
+        
+        // Check if line intersects any relationship box
+        for box_layout in &self.relationship_boxes {
+            if self.line_intersects_rect(start, end, &box_layout.bounds) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    fn line_intersects_rect(&self, start: Point, end: Point, rect: &Rectangle) -> bool {
+        // Add padding around rectangle for better clearance
+        let padding = 10.0;
+        let rect_left = rect.x - padding;
+        let rect_right = rect.x + rect.width + padding;
+        let rect_top = rect.y - padding;
+        let rect_bottom = rect.y + rect.height + padding;
+        
+        // Check if either endpoint is inside the rectangle
+        if start.x >= rect_left && start.x <= rect_right && start.y >= rect_top && start.y <= rect_bottom {
+            return false; // Start point is on the rectangle edge (connection point)
+        }
+        if end.x >= rect_left && end.x <= rect_right && end.y >= rect_top && end.y <= rect_bottom {
+            return false; // End point is on the rectangle edge (connection point)
+        }
+        
+        // Simple check: if line passes through rectangle area
+        let line_min_x = start.x.min(end.x);
+        let line_max_x = start.x.max(end.x);
+        let line_min_y = start.y.min(end.y);
+        let line_max_y = start.y.max(end.y);
+        
+        // Check if rectangle overlaps with line bounding box
+        if rect_right < line_min_x || rect_left > line_max_x || 
+           rect_bottom < line_min_y || rect_top > line_max_y {
+            return false;
+        }
+        
+        // More precise intersection check using line-rectangle intersection
+        // Check intersection with all four edges
+        self.line_segments_intersect(start, end, 
+            Point::new(rect_left, rect_top), Point::new(rect_right, rect_top)) ||
+        self.line_segments_intersect(start, end,
+            Point::new(rect_right, rect_top), Point::new(rect_right, rect_bottom)) ||
+        self.line_segments_intersect(start, end,
+            Point::new(rect_right, rect_bottom), Point::new(rect_left, rect_bottom)) ||
+        self.line_segments_intersect(start, end,
+            Point::new(rect_left, rect_bottom), Point::new(rect_left, rect_top))
+    }
+    
+    fn line_segments_intersect(&self, p1: Point, p2: Point, p3: Point, p4: Point) -> bool {
+        let d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
+        if d.abs() < 0.001 {
+            return false; // Parallel lines
+        }
+        
+        let t = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
+        let u = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
+        
+        t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0
+    }
+    
+    fn create_curved_path(&self, start: Point, end: Point) -> String {
+        // Create a quadratic Bezier curve that goes around obstacles
+        let mid_x = (start.x + end.x) / 2.0;
+        let mid_y = (start.y + end.y) / 2.0;
+        
+        // Calculate perpendicular offset for control point
+        let dx = end.x - start.x;
+        let dy = end.y - start.y;
+        let length = (dx * dx + dy * dy).sqrt();
+        
+        if length < 0.001 {
+            return format!("M {:.6} {:.6} L {:.6} {:.6}", start.x, start.y, end.x, end.y);
+        }
+        
+        // Offset the control point perpendicular to the line
+        let offset_distance = length * 0.2; // 20% of line length
+        let perp_x = -dy / length * offset_distance;
+        let perp_y = dx / length * offset_distance;
+        
+        let control_x = mid_x + perp_x;
+        let control_y = mid_y + perp_y;
+        
+        // Check if this curve would still intersect obstacles
+        // If so, try the opposite direction
+        let test_mid = Point::new((start.x + control_x) / 2.0, (start.y + control_y) / 2.0);
+        if self.line_intersects_obstacles(start, test_mid) || 
+           self.line_intersects_obstacles(test_mid, end) {
+            // Try opposite direction
+            let control_x = mid_x - perp_x;
+            let control_y = mid_y - perp_y;
+            format!("M {:.6} {:.6} Q {:.6} {:.6} {:.6} {:.6}", 
+                    start.x, start.y, control_x, control_y, end.x, end.y)
+        } else {
+            format!("M {:.6} {:.6} Q {:.6} {:.6} {:.6} {:.6}", 
+                    start.x, start.y, control_x, control_y, end.x, end.y)
+        }
+    }
+
     pub fn render_line_segment(&mut self, start: Point, end: Point, relationship_type: super::super::ast::RelationshipType, marker_position: &str) {
         let class = match relationship_type {
             super::super::ast::RelationshipType::OneToOne => "relationship-line relationship-dashed",
@@ -381,6 +489,9 @@ impl SvgRenderer {
             _ => ("", ""),
         };
         
+        // Check if line intersects obstacles and use curved path if needed
+        let use_curved_path = self.line_intersects_obstacles(start, end);
+        
         // For many-to-many, render two parallel lines (double line effect)
         if matches!(relationship_type, super::super::ast::RelationshipType::ManyToMany) {
             // Calculate perpendicular offset for parallel lines
@@ -393,26 +504,53 @@ impl SvgRenderer {
                 let perp_x = -dy / length * offset;
                 let perp_y = dx / length * offset;
                 
-                // First line (offset upward/leftward)
-                self.content.push_str(&format!(
-                    "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
-                    start.x + perp_x, start.y + perp_y, end.x + perp_x, end.y + perp_y, 
-                    class, marker_start, marker_end
-                ));
-                
-                // Second line (offset downward/rightward)
-                self.content.push_str(&format!(
-                    "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
-                    start.x - perp_x, start.y - perp_y, end.x - perp_x, end.y - perp_y, 
-                    class, marker_start, marker_end
-                ));
+                if use_curved_path {
+                    // Use curved paths for both lines
+                    let path1 = self.create_curved_path(
+                        Point::new(start.x + perp_x, start.y + perp_y),
+                        Point::new(end.x + perp_x, end.y + perp_y)
+                    );
+                    let path2 = self.create_curved_path(
+                        Point::new(start.x - perp_x, start.y - perp_y),
+                        Point::new(end.x - perp_x, end.y - perp_y)
+                    );
+                    
+                    self.content.push_str(&format!(
+                        "  <path d=\"{}\" class=\"{}\" {} {} />\n",
+                        path1, class, marker_start, marker_end
+                    ));
+                    self.content.push_str(&format!(
+                        "  <path d=\"{}\" class=\"{}\" {} {} />\n",
+                        path2, class, marker_start, marker_end
+                    ));
+                } else {
+                    // Straight parallel lines
+                    self.content.push_str(&format!(
+                        "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
+                        start.x + perp_x, start.y + perp_y, end.x + perp_x, end.y + perp_y, 
+                        class, marker_start, marker_end
+                    ));
+                    self.content.push_str(&format!(
+                        "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
+                        start.x - perp_x, start.y - perp_y, end.x - perp_x, end.y - perp_y, 
+                        class, marker_start, marker_end
+                    ));
+                }
             }
         } else {
             // Single line for all other relationship types
-            self.content.push_str(&format!(
-                "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
-                start.x, start.y, end.x, end.y, class, marker_start, marker_end
-            ));
+            if use_curved_path {
+                let curved_path = self.create_curved_path(start, end);
+                self.content.push_str(&format!(
+                    "  <path d=\"{}\" class=\"{}\" {} {} />\n",
+                    curved_path, class, marker_start, marker_end
+                ));
+            } else {
+                self.content.push_str(&format!(
+                    "  <path d=\"M {:.6} {:.6} L {:.6} {:.6}\" class=\"{}\" {} {} />\n",
+                    start.x, start.y, end.x, end.y, class, marker_start, marker_end
+                ));
+            }
         }
     }
 
