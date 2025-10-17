@@ -5,6 +5,8 @@ pub struct SvgRenderer {
     content: String,
     pub table_layouts: Vec<Rectangle>,
     pub relationship_boxes: Vec<RelationshipBoxLayout>,
+    title: Option<String>,
+    canvas_width: f64,
 }
 
 impl SvgRenderer {
@@ -13,6 +15,8 @@ impl SvgRenderer {
             content: String::new(),
             table_layouts: Vec::new(),
             relationship_boxes: Vec::new(),
+            title: None,
+            canvas_width: 0.0,
         }
     }
     
@@ -81,6 +85,9 @@ impl SvgRenderer {
     }
 
     pub fn start_svg(&mut self, width: f64, height: f64, title: Option<&str>) {
+        self.canvas_width = width;
+        self.title = title.map(|t| t.to_string());
+        
         self.content.push_str(&format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">
@@ -301,6 +308,18 @@ impl SvgRenderer {
             "  <rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" fill=\"#ffffff\" />\n",
             width, height
         ));
+    }
+    
+    pub fn render_title(&mut self) {
+        if let Some(ref title) = self.title.clone() {
+            let title_x = self.canvas_width / 2.0;
+            let escaped_title = Self::escape_xml(title);
+            self.content.push_str(&format!(
+                "  <text x=\"{}\" y=\"30\" text-anchor=\"middle\" font-size=\"24\" font-weight=\"bold\" fill=\"#2c3e50\">{}</text>\n",
+                title_x,
+                escaped_title
+            ));
+        }
     }
 
     fn render_marker_at_dot(&mut self, x: f64, y: f64, side: ConnectionSide, relationship_type: super::super::ast::RelationshipType, is_source: bool) {

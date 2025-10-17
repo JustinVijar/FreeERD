@@ -41,6 +41,9 @@ impl SvgGenerator {
         
         // Add background
         renderer.add_background(width, height);
+        
+        // Render title after background so it's visible
+        renderer.render_title();
 
         // Render relationships in two phases to ensure proper layering
         // Phase 1: Create relationship boxes first (to get exact connection points)
