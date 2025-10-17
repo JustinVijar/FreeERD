@@ -239,3 +239,214 @@ impl SchemaStatistics {
         println!("  Foreign Keys: {}", self.foreign_keys);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_table(name: &str, columns: Vec<(&str, DataType, Vec<Attribute>)>) -> Table {
+        Table {
+            name: name.to_string(),
+            columns: columns.into_iter().map(|(col_name, dtype, attrs)| Column {
+                name: col_name.to_string(),
+                datatype: dtype,
+                attributes: attrs,
+                span: None,
+            }).collect(),
+            span: None,
+        }
+    }
+
+    #[test]
+    fn test_valid_schema() {
+        let schema = Schema {
+            title: Some("Test".to_string()),
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                    ("name", DataType::String, vec![]),
+                ]),
+            ],
+            relationships: vec![],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        assert!(interpreter.validate().is_ok());
+    }
+
+    #[test]
+    fn test_duplicate_table() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![]),
+                create_test_table("Users", vec![]),
+            ],
+            relationships: vec![],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(errors[0], ValidationError::DuplicateTable { .. }));
+    }
+
+    #[test]
+    fn test_duplicate_column() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![]),
+                    ("id", DataType::String, vec![]),
+                ]),
+            ],
+            relationships: vec![],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(errors[0], ValidationError::DuplicateColumn { .. }));
+    }
+
+    #[test]
+    fn test_table_not_found_in_relationship() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                ]),
+            ],
+            relationships: vec![
+                Relationship {
+                    from_table: "Users".to_string(),
+                    from_field: "id".to_string(),
+                    to_table: "Posts".to_string(),
+                    to_field: "user_id".to_string(),
+                    relationship_type: RelationshipType::OneToMany,
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| matches!(e, ValidationError::TableNotFound { .. })));
+    }
+
+    #[test]
+    fn test_column_not_found_in_relationship() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                ]),
+                create_test_table("Posts", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                ]),
+            ],
+            relationships: vec![
+                Relationship {
+                    from_table: "Users".to_string(),
+                    from_field: "nonexistent".to_string(),
+                    to_table: "Posts".to_string(),
+                    to_field: "id".to_string(),
+                    relationship_type: RelationshipType::OneToMany,
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| matches!(e, ValidationError::ColumnNotFound { .. })));
+    }
+
+    #[test]
+    fn test_statistics() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                    ("email", DataType::String, vec![Attribute::Unique]),
+                ]),
+                create_test_table("Posts", vec![
+                    ("id", DataType::Int, vec![Attribute::PrimaryKey]),
+                    ("user_id", DataType::Int, vec![Attribute::ForeignKey]),
+                ]),
+            ],
+            relationships: vec![
+                Relationship {
+                    from_table: "Users".to_string(),
+                    from_field: "id".to_string(),
+                    to_table: "Posts".to_string(),
+                    to_field: "user_id".to_string(),
+                    relationship_type: RelationshipType::OneToMany,
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let stats = interpreter.get_statistics();
+        
+        assert_eq!(stats.table_count, 2);
+        assert_eq!(stats.total_columns, 4);
+        assert_eq!(stats.relationship_count, 1);
+        assert_eq!(stats.primary_keys, 2);
+        assert_eq!(stats.foreign_keys, 1);
+    }
+
+    #[test]
+    fn test_validation_error_display() {
+        let error = ValidationError::DuplicateTable {
+            name: "Users".to_string(),
+            span: None,
+        };
+        assert_eq!(error.to_string(), "Duplicate table definition: Users");
+
+        let error = ValidationError::TableNotFound {
+            name: "Posts".to_string(),
+            span: None,
+        };
+        assert_eq!(error.to_string(), "Table 'Posts' not found");
+    }
+
+    #[test]
+    fn test_multiple_validation_errors() {
+        let schema = Schema {
+            title: None,
+            tables: vec![
+                create_test_table("Users", vec![
+                    ("id", DataType::Int, vec![]),
+                    ("id", DataType::String, vec![]), // Duplicate column
+                ]),
+                create_test_table("Users", vec![]), // Duplicate table
+            ],
+            relationships: vec![],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert!(errors.len() >= 2); // At least duplicate table and column errors
+    }
+}

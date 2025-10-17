@@ -1,363 +1,256 @@
-use crate::ast::{Schema, Relationship, RelationshipType};
-use super::layout::{LayoutEngine, Point, ConnectionSide};
-use super::renderer::SvgRenderer;
+use crate::ast::{Schema, Table, Column, Relationship, RelationshipType, DataType, Attribute};
+use std::process::{Command, Stdio};
+use std::io::Write;
 
 pub struct SvgGenerator {
     schema: Schema,
-    layout_engine: LayoutEngine,
 }
 
 impl SvgGenerator {
     pub fn new(schema: Schema) -> Self {
-        SvgGenerator {
-            schema,
-            layout_engine: LayoutEngine::new(),
-        }
+        SvgGenerator { schema }
     }
 
     pub fn generate_with_defs(&self) -> String {
-        let mut generator = self.clone();
-        generator.generate_internal()
-    }
-
-    fn generate_internal(&mut self) -> String {
-        // Layout tables using Fruchterman-Reingold with relationships
-        self.layout_engine.layout_tables_with_relationships(&self.schema.tables, &self.schema.relationships);
-
-        let mut renderer = SvgRenderer::new();
+        // Generate DOT format
+        let dot_content = self.generate_dot();
         
-        // Start SVG with calculated dimensions
-        let width = self.layout_engine.canvas_width;
-        let height = self.layout_engine.canvas_height;
+        println!("🎨 Generating SVG using Graphviz...");
         
-        renderer.start_svg(width, height, self.schema.title.as_deref());
-        
-        // Pass table layouts to renderer for accurate collision detection
-        let table_rectangles: Vec<super::layout::Rectangle> = self.layout_engine.table_layouts
-            .iter()
-            .map(|layout| layout.bounds.clone())
-            .collect();
-        renderer.set_table_layouts(table_rectangles);
-        
-        // Add background
-        renderer.add_background(width, height);
-        
-        // Render title after background so it's visible
-        renderer.render_title();
-
-        // Render relationships in two phases to ensure proper layering
-        // Phase 1: Create relationship boxes first (to get exact connection points)
-        self.create_relationship_boxes(&mut renderer);
-        
-        // Phase 2: Render ALL line segments using exact box connection points
-        self.render_relationship_lines_with_boxes(&mut renderer);
-        
-        // Phase 3: Render ALL relationship boxes (on top of lines, but behind tables)
-        renderer.render_relationship_boxes();
-
-        // Render tables SECOND (so they appear on top of lines)
-        for layout in &self.layout_engine.table_layouts {
-            if let Some(table) = self.schema.tables.iter().find(|t| t.name == layout.table_name) {
-                renderer.render_table(layout, table);
+        // Call Graphviz dot command to render SVG
+        match self.render_svg_from_dot(&dot_content) {
+            Ok(svg) => {
+                println!("✅ SVG generated successfully using Graphviz!");
+                svg
+            },
+            Err(e) => {
+                eprintln!("❌ Error generating SVG: {}", e);
+                String::from("<svg><text>Error generating diagram</text></svg>")
             }
         }
-
-        // End SVG
-        renderer.end_svg();
-
-        renderer.get_content().to_string()
     }
-
-    fn create_relationship_boxes(&self, renderer: &mut SvgRenderer) {
-        let mut existing_boxes: Vec<super::layout::Rectangle> = Vec::new();
+    
+    fn generate_dot(&self) -> String {
+        let mut dot = String::new();
         
+        // Start digraph
+        dot.push_str("digraph ERD {\n");
+        
+        // Graph attributes
+        dot.push_str("  bgcolor=\"#f8f9fa\";\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  nodesep=2.0;\n");  // Increased horizontal spacing
+        dot.push_str("  ranksep=2.0;\n");  // Increased vertical spacing
+        dot.push_str("  splines=ortho;\n");
+        dot.push_str("  pad=0.5;\n");
+        dot.push_str("  concentrate=false;\n");  // Don't merge edges
+        
+        // Default node attributes
+        dot.push_str("  node [shape=plain, fontname=\"Arial\", fontsize=11];\n");
+        
+        // Default edge attributes
+        dot.push_str("  edge [color=\"#34495e\", fontsize=9, fontname=\"Arial\", penwidth=1.5];\n");
+        
+        // Add title if present
+        if let Some(title) = &self.schema.title {
+            dot.push_str(&format!("  label=\"{}\n\";\n", self.escape_dot(title)));
+            dot.push_str("  labelloc=t;\n");
+            dot.push_str("  labeljust=c;\n");
+            dot.push_str("  fontsize=24;\n");
+        }
+        
+        dot.push_str("\n");
+        
+        // Add tables as nodes
+        for table in &self.schema.tables {
+            self.add_table_node(&mut dot, table);
+        }
+        
+        dot.push_str("\n");
+        
+        // Add relationships as edges
         for relationship in &self.schema.relationships {
-            self.create_single_relationship_box(renderer, relationship, &existing_boxes);
-            
-            // Add the newly created box to existing boxes for collision detection
-            if let Some(last_box) = renderer.relationship_boxes.last() {
-                existing_boxes.push(last_box.bounds.clone());
-            }
+            self.add_relationship_edge(&mut dot, relationship);
         }
+        
+        dot.push_str("}\n");
+        
+        dot
     }
     
-    fn create_single_relationship_box(&self, renderer: &mut SvgRenderer, relationship: &Relationship, existing_boxes: &[super::layout::Rectangle]) {
-        // Find source and target table layouts
-        let source_layout = match self.layout_engine.find_table_layout(&relationship.from_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        let target_layout = match self.layout_engine.find_table_layout(&relationship.to_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        // Calculate connection points
-        let (start_point, end_point) = self.calculate_connection_points(
-            source_layout, target_layout, &relationship.from_field, &relationship.to_field
-        );
-
-        let is_self_referencing = relationship.from_table == relationship.to_table;
+    fn add_table_node(&self, dot: &mut String, table: &Table) {
+        let node_id = &table.name;
         
-        let path = if is_self_referencing {
-            // Use curved path for self-referencing relationships
-            self.layout_engine.get_self_referencing_curve(&source_layout.bounds)
-        } else {
-            // Use simple straight line
-            vec![start_point, end_point]
-        };
-
-        // Create relationship text
-        let operator = match relationship.relationship_type {
-            RelationshipType::OneToOne => "-",
-            RelationshipType::OneToMany => ">",
-            RelationshipType::ManyToOne => "<",
-            RelationshipType::ManyToMany => "<>",
-        };
-        let relationship_text = format!("{}.{} {} {}.{}", 
-            relationship.from_table, relationship.from_field, operator, 
-            relationship.to_table, relationship.to_field);
-
-        // Find optimal position with proper collision detection
-        let box_position = self.find_optimal_position_with_collision_detection(&path, &relationship_text, &renderer.table_layouts, existing_boxes);
+        // Build HTML-like label for better styling
+        let mut label = String::from("<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"8\">");
         
-        // Create relationship box layout
-        let box_id = format!("{}_{}_{}_{}", 
-            relationship.from_table, relationship.from_field,
-            relationship.to_table, relationship.to_field);
+        // Table header row with darker background
+        label.push_str(&format!(
+            "<TR><TD BGCOLOR=\"#3498db\" COLSPAN=\"1\"><FONT COLOR=\"white\" POINT-SIZE=\"13\"><B>{}</B></FONT></TD></TR>",
+            self.escape_html(&table.name)
+        ));
         
-        let box_layout = super::layout::RelationshipBoxLayout::new(
-            box_id,
-            relationship_text,
-            box_position,
-            start_point,
-            end_point,
-            existing_boxes,
-        );
+        // Column rows with alternating colors
+        for (i, col) in table.columns.iter().enumerate() {
+            let bg_color = if i % 2 == 0 { "#f8f9fa" } else { "#ffffff" };
+            let column_text = self.format_column_html(col);
+            label.push_str(&format!(
+                "<TR><TD BGCOLOR=\"{}\" ALIGN=\"LEFT\">{}</TD></TR>",
+                bg_color, column_text
+            ));
+        }
         
-        // Add to renderer
-        renderer.add_relationship_box(box_layout);
+        label.push_str("</TABLE>>");
+        
+        // Add node
+        dot.push_str(&format!("  \"{}\" [label={}];\n", 
+            self.escape_dot(node_id), label));
     }
     
-    fn find_optimal_position_with_collision_detection(&self, path: &[Point], relationship_text: &str, table_layouts: &[super::layout::Rectangle], existing_boxes: &[super::layout::Rectangle]) -> Point {
-        if path.len() < 2 {
-            return path[0];
+    fn format_column_html(&self, column: &Column) -> String {
+        let mut parts = Vec::new();
+        
+        // Column name
+        parts.push(format!("<B>{}</B>", self.escape_html(&column.name)));
+        
+        // Data type in gray
+        let type_str = self.format_datatype(&column.datatype);
+        parts.push(format!("<FONT COLOR=\"#7f8c8d\">{}</FONT>", type_str));
+        
+        // Attributes in blue
+        if !column.attributes.is_empty() {
+            let attrs: Vec<String> = column.attributes.iter().map(|attr| {
+                self.format_attribute(attr)
+            }).collect();
+            parts.push(format!("<FONT COLOR=\"#3498db\">[{}]</FONT>", attrs.join(",")));
         }
         
-        let start = path[0];
-        let end = path[path.len() - 1];
-        
-        // Calculate box dimensions for collision detection
-        let text_width = relationship_text.len() as f64 * 6.5;
-        let text_height = 16.0;
-        let padding = 6.0;
-        let box_width = text_width + padding * 2.0;
-        let box_height = text_height + padding * 2.0;
-        
-        // Try multiple positions along the line
-        let candidate_ratios = vec![0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8];
-        
-        for &ratio in &candidate_ratios {
-            let candidate = Point::new(
-                start.x + (end.x - start.x) * ratio,
-                start.y + (end.y - start.y) * ratio
-            );
-            
-            if self.is_position_safe_from_all_obstacles(candidate, box_width, box_height, table_layouts, existing_boxes) {
-                return candidate;
-            }
-        }
-        
-        // Try perpendicular offsets if no position along line works
-        let midpoint = Point::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0);
-        let dx = end.x - start.x;
-        let dy = end.y - start.y;
-        let distance = (dx * dx + dy * dy).sqrt();
-        
-        if distance > 0.0 {
-            let offsets = vec![60.0, 80.0, 100.0, 120.0, 150.0];
-            
-            for &offset_distance in &offsets {
-                let perpendicular_x = -dy / distance * offset_distance;
-                let perpendicular_y = dx / distance * offset_distance;
-                
-                let candidates = vec![
-                    Point::new(midpoint.x + perpendicular_x, midpoint.y + perpendicular_y),
-                    Point::new(midpoint.x - perpendicular_x, midpoint.y - perpendicular_y),
-                ];
-                
-                for candidate in candidates {
-                    if self.is_position_safe_from_all_obstacles(candidate, box_width, box_height, table_layouts, existing_boxes) {
-                        return candidate;
-                    }
-                }
-            }
-        }
-        
-        // Fallback to midpoint with vertical offset
-        Point::new(midpoint.x, midpoint.y - 100.0)
+        parts.join(" ")
     }
     
-    fn is_position_safe_from_all_obstacles(&self, position: Point, box_width: f64, box_height: f64, table_layouts: &[super::layout::Rectangle], existing_boxes: &[super::layout::Rectangle]) -> bool {
-        let box_left = position.x - box_width / 2.0;
-        let box_right = position.x + box_width / 2.0;
-        let box_top = position.y - box_height / 2.0;
-        let box_bottom = position.y + box_height / 2.0;
-        
-        let safe_margin = 50.0;
-        let box_spacing = 40.0;
-        
-        // Check collision with tables
-        for table_rect in table_layouts {
-            if !(box_right + safe_margin < table_rect.x || 
-                 box_left - safe_margin > table_rect.x + table_rect.width ||
-                 box_bottom + safe_margin < table_rect.y ||
-                 box_top - safe_margin > table_rect.y + table_rect.height) {
-                return false; // Collision with table
-            }
-        }
-        
-        // Check collision with existing relationship boxes
-        for existing_box in existing_boxes {
-            if !(box_right + box_spacing < existing_box.x || 
-                 box_left - box_spacing > existing_box.x + existing_box.width ||
-                 box_bottom + box_spacing < existing_box.y ||
-                 box_top - box_spacing > existing_box.y + existing_box.height) {
-                return false; // Collision with existing box
-            }
-        }
-        
-        // Check canvas bounds
-        if position.x < 50.0 || position.x > 2550.0 || position.y < 50.0 || position.y > 1850.0 {
-            return false;
-        }
-        
-        true
+    fn escape_html(&self, text: &str) -> String {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
     }
     
-    fn render_relationship_lines_with_boxes(&self, renderer: &mut SvgRenderer) {
-        for relationship in &self.schema.relationships {
-            self.render_single_relationship_line_with_box(renderer, relationship);
-        }
+    
+    fn format_datatype(&self, datatype: &DataType) -> String {
+        match datatype {
+            DataType::String => "string",
+            DataType::Int => "int",
+            DataType::Bool => "bool",
+            DataType::Double => "double",
+            DataType::Float => "float",
+            DataType::Date => "date",
+            DataType::Time => "time",
+            DataType::DateTime => "datetime",
+            DataType::Blob => "blob",
+            DataType::TinyBlob => "tinyblob",
+            DataType::LargeBlob => "largeblob",
+            DataType::Custom(s) => s,
+        }.to_string()
     }
     
-    fn render_single_relationship_line_with_box(&self, renderer: &mut SvgRenderer, relationship: &Relationship) {
-        // Find source and target table layouts
-        let source_layout = match self.layout_engine.find_table_layout(&relationship.from_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        let target_layout = match self.layout_engine.find_table_layout(&relationship.to_table) {
-            Some(layout) => layout,
-            None => return,
-        };
-
-        // Calculate connection points
-        let (start_point, end_point) = self.calculate_connection_points(
-            source_layout, target_layout, &relationship.from_field, &relationship.to_field
-        );
-
-        // Find the corresponding relationship box
-        let box_id = format!("{}_{}_{}_{}", 
-            relationship.from_table, relationship.from_field,
-            relationship.to_table, relationship.to_field);
-        
-        if let Some(box_layout) = renderer.relationship_boxes.iter().find(|b| b.id == box_id) {
-            let (source_dot, target_dot) = box_layout.get_dot_positions();
-            
-            // Render line segments with EXACT connection to dots WITHOUT markers
-            // (markers are drawn at the box dots instead)
-            renderer.render_line_segment(start_point, source_dot, relationship.relationship_type, "none");
-            renderer.render_line_segment(target_dot, end_point, relationship.relationship_type, "none");
-        }
-    }
-
-    fn calculate_connection_points(
-        &self,
-        source_layout: &super::layout::TableLayout,
-        target_layout: &super::layout::TableLayout,
-        from_field: &str,
-        to_field: &str,
-    ) -> (Point, Point) {
-        let source_bounds = &source_layout.bounds;
-        let target_bounds = &target_layout.bounds;
-
-        // Determine best connection sides based on relative positions
-        let source_center = source_bounds.center();
-        let target_center = target_bounds.center();
-
-        let dx = target_center.x - source_center.x;
-        let dy = target_center.y - source_center.y;
-
-        let (source_side, target_side) = if dx.abs() > dy.abs() {
-            // Horizontal connection preferred
-            if dx > 0.0 {
-                (ConnectionSide::Right, ConnectionSide::Left)
-            } else {
-                (ConnectionSide::Left, ConnectionSide::Right)
-            }
-        } else {
-            // Vertical connection preferred
-            if dy > 0.0 {
-                (ConnectionSide::Bottom, ConnectionSide::Top)
-            } else {
-                (ConnectionSide::Top, ConnectionSide::Bottom)
-            }
-        };
-
-        // Calculate distributed connection points to avoid overlap
-        // Include both source and target info to ensure unique positioning for each relationship
-        let source_key = format!("{}_to_{}", 
-            source_layout.table_name, target_layout.table_name);
-        let target_key = format!("{}_{}_from_{}_{}", 
-            to_field, target_layout.table_name, source_layout.table_name, from_field);
-        
-        let start_point = self.get_distributed_connection_point(source_bounds, source_side, &source_key);
-        let end_point = self.get_distributed_connection_point(target_bounds, target_side, &target_key);
-
-        (start_point, end_point)
+    fn format_attribute(&self, attr: &Attribute) -> String {
+        match attr {
+            Attribute::PrimaryKey => "PK",
+            Attribute::ForeignKey => "FK",
+            Attribute::Unique => "UQ",
+            Attribute::Nullable => "NULL",
+            Attribute::AutoIncrement => "AI",
+            Attribute::Default(_) => "DEF",
+        }.to_string()
     }
     
-    fn get_distributed_connection_point(&self, bounds: &super::layout::Rectangle, side: ConnectionSide, field_name: &str) -> Point {
-        // Use field name hash to create consistent but distributed connection points
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        use std::hash::{Hash, Hasher};
-        field_name.hash(&mut hasher);
-        let hash_value = hasher.finish();
+    fn add_relationship_edge(&self, dot: &mut String, relationship: &Relationship) {
+        let from_node = &relationship.from_table;
+        let to_node = &relationship.to_table;
         
-        // Create offset based on hash (0.1 to 0.9 of the side length for better distribution)
-        let offset_ratio = 0.1 + (hash_value % 80) as f64 / 100.0; // 0.1 to 0.9
+        // Create label showing the relationship fields
+        let label = format!("{}.{} → {}.{}", 
+            from_node, relationship.from_field,
+            to_node, relationship.to_field);
         
-        match side {
-            ConnectionSide::Left => Point::new(
-                bounds.x,
-                bounds.y + bounds.height * offset_ratio
-            ),
-            ConnectionSide::Right => Point::new(
-                bounds.x + bounds.width,
-                bounds.y + bounds.height * offset_ratio
-            ),
-            ConnectionSide::Top => Point::new(
-                bounds.x + bounds.width * offset_ratio,
-                bounds.y
-            ),
-            ConnectionSide::Bottom => Point::new(
-                bounds.x + bounds.width * offset_ratio,
-                bounds.y + bounds.height
-            ),
+        // Build edge with attributes and xlabel
+        let mut edge = format!("  \"{}\" -> \"{}\" [", 
+            self.escape_dot(from_node), self.escape_dot(to_node));
+        
+        // Add xlabel without background highlight
+        edge.push_str(&format!(
+            "xlabel=<<FONT POINT-SIZE=\"8\">{}</FONT>>, ",
+            self.escape_html(&label)
+        ));
+        
+        // Set edge style based on relationship type
+        match relationship.relationship_type {
+            RelationshipType::OneToOne => {
+                edge.push_str("arrowhead=none, arrowtail=none, style=dashed");
+            }
+            RelationshipType::OneToMany => {
+                edge.push_str("arrowhead=crow, arrowtail=none, dir=forward");
+            }
+            RelationshipType::ManyToOne => {
+                edge.push_str("arrowhead=none, arrowtail=crow, dir=back");
+            }
+            RelationshipType::ManyToMany => {
+                edge.push_str("arrowhead=crow, arrowtail=crow, dir=both");
+            }
         }
+        
+        edge.push_str("];\n");
+        dot.push_str(&edge);
     }
-
-
+    
+    fn render_svg_from_dot(&self, dot_content: &str) -> Result<String, String> {
+        // Limit DOT content size to prevent DoS (5MB max)
+        if dot_content.len() > 5_000_000 {
+            return Err("DOT content too large (max 5MB)".to_string());
+        }
+        
+        let mut child = Command::new("dot")
+            .arg("-Tsvg")
+            .arg("-Gmaxiter=100")  // Limit Graphviz iterations
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn dot command: {}. Is Graphviz installed?", e))?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(dot_content.as_bytes())
+                .map_err(|e| format!("Failed to write to dot stdin: {}", e))?;
+        }
+        
+        let output = child.wait_with_output()
+            .map_err(|e| format!("Failed to wait for dot command: {}", e))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("dot command failed: {}", stderr));
+        }
+        
+        String::from_utf8(output.stdout)
+            .map_err(|e| format!("Invalid UTF-8 in SVG output: {}", e))
+    }
+    
+    fn escape_dot(&self, text: &str) -> String {
+        text.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('|', "\\|")
+            .replace('{', "\\{")
+            .replace('}', "\\}")
+            .replace('<', "\\<")
+            .replace('>', "\\>")
+    }
 }
 
 impl Clone for SvgGenerator {
     fn clone(&self) -> Self {
         SvgGenerator {
             schema: self.schema.clone(),
-            layout_engine: LayoutEngine::new(),
         }
     }
 }
@@ -365,70 +258,219 @@ impl Clone for SvgGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Table, Column, DataType, Attribute, RelationshipType};
 
-    #[test]
-    fn test_svg_generation() {
-        let mut schema = Schema::new();
-        schema.title = Some("Test Schema".to_string());
-
-        // Create a simple table
-        let mut table = Table::new("Users".to_string());
-        let mut id_column = Column::new("id".to_string(), DataType::Int);
-        id_column.attributes.push(Attribute::PrimaryKey);
-        table.columns.push(id_column);
-
-        let name_column = Column::new("name".to_string(), DataType::String);
-        table.columns.push(name_column);
-
-        schema.tables.push(table);
-
-        let generator = SvgGenerator::new(schema);
-        let svg_content = generator.generate();
-
-        // Basic checks
-        assert!(svg_content.contains("<svg"));
-        assert!(svg_content.contains("</svg>"));
-        assert!(svg_content.contains("Users"));
-        assert!(svg_content.contains("Test Schema"));
+    fn create_test_schema() -> Schema {
+        Schema {
+            title: Some("Test Schema".to_string()),
+            tables: vec![
+                Table {
+                    name: "Users".to_string(),
+                    columns: vec![
+                        Column {
+                            name: "id".to_string(),
+                            datatype: DataType::Int,
+                            attributes: vec![Attribute::PrimaryKey, Attribute::AutoIncrement],
+                            span: None,
+                        },
+                        Column {
+                            name: "email".to_string(),
+                            datatype: DataType::String,
+                            attributes: vec![Attribute::Unique],
+                            span: None,
+                        },
+                    ],
+                    span: None,
+                },
+                Table {
+                    name: "Posts".to_string(),
+                    columns: vec![
+                        Column {
+                            name: "id".to_string(),
+                            datatype: DataType::Int,
+                            attributes: vec![Attribute::PrimaryKey],
+                            span: None,
+                        },
+                        Column {
+                            name: "user_id".to_string(),
+                            datatype: DataType::Int,
+                            attributes: vec![Attribute::ForeignKey],
+                            span: None,
+                        },
+                    ],
+                    span: None,
+                },
+            ],
+            relationships: vec![
+                Relationship {
+                    from_table: "Users".to_string(),
+                    from_field: "id".to_string(),
+                    to_table: "Posts".to_string(),
+                    to_field: "user_id".to_string(),
+                    relationship_type: RelationshipType::OneToMany,
+                    span: None,
+                },
+            ],
+        }
     }
 
     #[test]
-    fn test_relationship_rendering() {
-        let mut schema = Schema::new();
+    fn test_generator_creation() {
+        let schema = create_test_schema();
+        let generator = SvgGenerator::new(schema.clone());
+        assert_eq!(generator.schema.tables.len(), 2);
+        assert_eq!(generator.schema.relationships.len(), 1);
+    }
 
-        // Create two tables
-        let mut users_table = Table::new("Users".to_string());
-        let mut id_column = Column::new("id".to_string(), DataType::Int);
-        id_column.attributes.push(Attribute::PrimaryKey);
-        users_table.columns.push(id_column);
-        schema.tables.push(users_table);
-
-        let mut orders_table = Table::new("Orders".to_string());
-        let mut order_id_column = Column::new("id".to_string(), DataType::Int);
-        order_id_column.attributes.push(Attribute::PrimaryKey);
-        orders_table.columns.push(order_id_column);
-
-        let mut user_id_column = Column::new("user_id".to_string(), DataType::Int);
-        user_id_column.attributes.push(Attribute::ForeignKey);
-        orders_table.columns.push(user_id_column);
-        schema.tables.push(orders_table);
-
-        // Add relationship
-        let relationship = Relationship {
-            from_table: "Users".to_string(),
-            from_field: "id".to_string(),
-            to_table: "Orders".to_string(),
-            to_field: "user_id".to_string(),
-            relationship_type: RelationshipType::OneToMany,
-        };
-        schema.relationships.push(relationship);
-
+    #[test]
+    fn test_dot_generation() {
+        let schema = create_test_schema();
         let generator = SvgGenerator::new(schema);
-        let svg_content = generator.generate();
+        let dot = generator.generate_dot();
+        
+        // Check DOT structure
+        assert!(dot.contains("digraph ERD"));
+        assert!(dot.contains("Users"));
+        assert!(dot.contains("Posts"));
+        assert!(dot.contains("->"));
+    }
 
-        // Check that relationship line is rendered
-        assert!(svg_content.contains("relationship-line"));
-        assert!(svg_content.contains("marker-end"));
+    #[test]
+    fn test_escape_dot() {
+        let schema = Schema::new();
+        let generator = SvgGenerator::new(schema);
+        
+        assert_eq!(generator.escape_dot("test\"quote"), "test\\\"quote");
+        assert_eq!(generator.escape_dot("test\\slash"), "test\\\\slash");
+        assert_eq!(generator.escape_dot("test\nline"), "test\\nline");
+        assert_eq!(generator.escape_dot("test|pipe"), "test\\|pipe");
+    }
+
+    #[test]
+    fn test_escape_html() {
+        let schema = Schema::new();
+        let generator = SvgGenerator::new(schema);
+        
+        assert_eq!(generator.escape_html("test<tag>"), "test&lt;tag&gt;");
+        assert_eq!(generator.escape_html("test&amp;"), "test&amp;amp;");
+        assert_eq!(generator.escape_html("test\"quote"), "test&quot;quote");
+    }
+
+    #[test]
+    fn test_format_datatype() {
+        let schema = Schema::new();
+        let generator = SvgGenerator::new(schema);
+        
+        assert_eq!(generator.format_datatype(&DataType::String), "string");
+        assert_eq!(generator.format_datatype(&DataType::Int), "int");
+        assert_eq!(generator.format_datatype(&DataType::DateTime), "datetime");
+        assert_eq!(generator.format_datatype(&DataType::Custom("uuid".to_string())), "uuid");
+    }
+
+    #[test]
+    fn test_format_attribute() {
+        let schema = Schema::new();
+        let generator = SvgGenerator::new(schema);
+        
+        assert_eq!(generator.format_attribute(&Attribute::PrimaryKey), "PK");
+        assert_eq!(generator.format_attribute(&Attribute::ForeignKey), "FK");
+        assert_eq!(generator.format_attribute(&Attribute::Unique), "UQ");
+        assert_eq!(generator.format_attribute(&Attribute::Nullable), "NULL");
+        assert_eq!(generator.format_attribute(&Attribute::AutoIncrement), "AI");
+    }
+
+    #[test]
+    fn test_relationship_types_in_dot() {
+        let mut schema = Schema::new();
+        schema.tables = vec![
+            Table {
+                name: "A".to_string(),
+                columns: vec![],
+                span: None,
+            },
+            Table {
+                name: "B".to_string(),
+                columns: vec![],
+                span: None,
+            },
+        ];
+
+        // Test OneToMany
+        schema.relationships = vec![
+            Relationship {
+                from_table: "A".to_string(),
+                from_field: "id".to_string(),
+                to_table: "B".to_string(),
+                to_field: "a_id".to_string(),
+                relationship_type: RelationshipType::OneToMany,
+                span: None,
+            },
+        ];
+        let generator = SvgGenerator::new(schema.clone());
+        let dot = generator.generate_dot();
+        assert!(dot.contains("arrowhead=crow"));
+
+        // Test OneToOne
+        schema.relationships[0].relationship_type = RelationshipType::OneToOne;
+        let generator = SvgGenerator::new(schema.clone());
+        let dot = generator.generate_dot();
+        assert!(dot.contains("style=dashed"));
+
+        // Test ManyToMany
+        schema.relationships[0].relationship_type = RelationshipType::ManyToMany;
+        let generator = SvgGenerator::new(schema);
+        let dot = generator.generate_dot();
+        assert!(dot.contains("arrowtail=crow"));
+    }
+
+    #[test]
+    fn test_title_in_dot() {
+        let mut schema = Schema::new();
+        schema.title = Some("My Database".to_string());
+        
+        let generator = SvgGenerator::new(schema);
+        let dot = generator.generate_dot();
+        
+        assert!(dot.contains("My Database"));
+        assert!(dot.contains("labelloc=t"));
+    }
+
+    #[test]
+    fn test_clone() {
+        let schema = create_test_schema();
+        let generator = SvgGenerator::new(schema);
+        let cloned = generator.clone();
+        
+        assert_eq!(generator.schema.tables.len(), cloned.schema.tables.len());
+        assert_eq!(generator.schema.relationships.len(), cloned.schema.relationships.len());
+    }
+
+    #[test]
+    fn test_empty_schema() {
+        let schema = Schema::new();
+        let generator = SvgGenerator::new(schema);
+        let dot = generator.generate_dot();
+        
+        assert!(dot.contains("digraph ERD"));
+        assert!(dot.contains("}"));
+    }
+
+    #[test]
+    fn test_column_formatting() {
+        let schema = create_test_schema();
+        let generator = SvgGenerator::new(schema);
+        
+        let column = Column {
+            name: "test_col".to_string(),
+            datatype: DataType::String,
+            attributes: vec![Attribute::PrimaryKey, Attribute::Unique],
+            span: None,
+        };
+        
+        let formatted = generator.format_column_html(&column);
+        assert!(formatted.contains("test_col"));
+        assert!(formatted.contains("string"));
+        assert!(formatted.contains("PK"));
+        assert!(formatted.contains("UQ"));
     }
 }
+

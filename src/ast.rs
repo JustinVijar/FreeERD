@@ -190,3 +190,103 @@ impl fmt::Display for RelationshipType {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_schema_new() {
+        let schema = Schema::new();
+        assert!(schema.title.is_none());
+        assert_eq!(schema.tables.len(), 0);
+        assert_eq!(schema.relationships.len(), 0);
+    }
+
+    #[test]
+    fn test_datatype_display() {
+        assert_eq!(DataType::String.to_string(), "str");
+        assert_eq!(DataType::Int.to_string(), "int");
+        assert_eq!(DataType::Bool.to_string(), "bool");
+        assert_eq!(DataType::DateTime.to_string(), "datetime");
+        assert_eq!(DataType::Custom("uuid".to_string()).to_string(), "uuid");
+    }
+
+    #[test]
+    fn test_attribute_display() {
+        assert_eq!(Attribute::PrimaryKey.to_string(), "pk");
+        assert_eq!(Attribute::ForeignKey.to_string(), "fk");
+        assert_eq!(Attribute::Unique.to_string(), "unique");
+        assert_eq!(Attribute::Nullable.to_string(), "nullable");
+        assert_eq!(Attribute::AutoIncrement.to_string(), "autoincrement");
+    }
+
+    #[test]
+    fn test_default_value_display() {
+        assert_eq!(DefaultValue::Now.to_string(), "NOW");
+        assert_eq!(DefaultValue::True.to_string(), "TRUE");
+        assert_eq!(DefaultValue::False.to_string(), "FALSE");
+        assert_eq!(DefaultValue::Null.to_string(), "NULL");
+        assert_eq!(DefaultValue::String("test".to_string()).to_string(), "\"test\"");
+        assert_eq!(DefaultValue::Number(42).to_string(), "42");
+    }
+
+    #[test]
+    fn test_relationship_type_display() {
+        assert_eq!(RelationshipType::OneToMany.to_string(), "one-to-many");
+        assert_eq!(RelationshipType::ManyToOne.to_string(), "many-to-one");
+        assert_eq!(RelationshipType::ManyToMany.to_string(), "many-to-many");
+        assert_eq!(RelationshipType::OneToOne.to_string(), "one-to-one");
+    }
+
+    #[test]
+    fn test_table_creation() {
+        let span = Span { line: 1, column: 1, length: 10 };
+        let table = Table::with_span("Users".to_string(), span);
+        assert_eq!(table.name, "Users");
+        assert_eq!(table.columns.len(), 0);
+        assert!(table.span.is_some());
+    }
+
+    #[test]
+    fn test_column_creation() {
+        let span = Span { line: 1, column: 1, length: 10 };
+        let column = Column::with_span("id".to_string(), DataType::Int, span);
+        assert_eq!(column.name, "id");
+        assert_eq!(column.datatype, DataType::Int);
+        assert_eq!(column.attributes.len(), 0);
+        assert!(column.span.is_some());
+    }
+
+    #[test]
+    fn test_schema_clone() {
+        let mut schema = Schema::new();
+        schema.title = Some("Test".to_string());
+        
+        let cloned = schema.clone();
+        assert_eq!(schema.title, cloned.title);
+    }
+
+    #[test]
+    fn test_datatype_equality() {
+        assert_eq!(DataType::Int, DataType::Int);
+        assert_ne!(DataType::Int, DataType::String);
+        assert_eq!(DataType::Custom("uuid".to_string()), DataType::Custom("uuid".to_string()));
+    }
+
+    #[test]
+    fn test_attribute_equality() {
+        assert_eq!(Attribute::PrimaryKey, Attribute::PrimaryKey);
+        assert_ne!(Attribute::PrimaryKey, Attribute::ForeignKey);
+        
+        let default1 = Attribute::Default(DefaultValue::Now);
+        let default2 = Attribute::Default(DefaultValue::Now);
+        assert_eq!(default1, default2);
+    }
+
+    #[test]
+    fn test_relationship_type_equality() {
+        assert_eq!(RelationshipType::OneToMany, RelationshipType::OneToMany);
+        assert_ne!(RelationshipType::OneToMany, RelationshipType::ManyToOne);
+    }
+}

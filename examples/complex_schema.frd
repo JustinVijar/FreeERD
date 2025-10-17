@@ -1,0 +1,566 @@
+title "Enterprise Resource Planning System"
+
+// ============================================================
+// HUMAN RESOURCES MODULE
+// ============================================================
+
+table Departments {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable],
+  parent_id: int [fk, nullable],
+  budget: double,
+  location: str,
+  created_at: datetime [default=NOW]
+}
+
+table Employees {
+  id: int [pk, autoincrement],
+  employee_code: str [unique],
+  first_name: str,
+  last_name: str,
+  email: str [unique],
+  phone: str,
+  department_id: int [fk],
+  manager_id: int [fk, nullable],
+  position: str,
+  salary: double,
+  hire_date: date [default=NOW],
+  termination_date: date [nullable],
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW]
+}
+
+table Attendance {
+  id: int [pk, autoincrement],
+  employee_id: int [fk],
+  date: date,
+  check_in: time,
+  check_out: time [nullable],
+  status: str [default="present"],
+  notes: str [nullable]
+}
+
+// ============================================================
+// CUSTOMER RELATIONSHIP MANAGEMENT
+// ============================================================
+
+table Customers {
+  id: int [pk, autoincrement],
+  customer_code: str [unique],
+  company_name: str [nullable],
+  first_name: str,
+  last_name: str,
+  email: str [unique],
+  phone: str,
+  tax_id: str [nullable],
+  customer_type: str [default="individual"],
+  credit_limit: double [default=0],
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW]
+}
+
+table CustomerAddresses {
+  id: int [pk, autoincrement],
+  customer_id: int [fk],
+  address_type: str [default="billing"],
+  street: str,
+  city: str,
+  state: str,
+  zip_code: str,
+  country: str [default="USA"],
+  is_default: bool [default=FALSE]
+}
+
+table CustomerContacts {
+  id: int [pk, autoincrement],
+  customer_id: int [fk],
+  contact_name: str,
+  position: str [nullable],
+  email: str,
+  phone: str,
+  is_primary: bool [default=FALSE]
+}
+
+// ============================================================
+// PRODUCT MANAGEMENT
+// ============================================================
+
+table ProductCategories {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable],
+  parent_id: int [fk, nullable],
+  is_active: bool [default=TRUE]
+}
+
+table Products {
+  id: int [pk, autoincrement],
+  sku: str [unique],
+  name: str,
+  description: str [nullable],
+  category_id: int [fk],
+  unit_of_measure: str [default="piece"],
+  cost_price: double,
+  selling_price: double,
+  min_stock_level: int [default=10],
+  max_stock_level: int [default=1000],
+  reorder_point: int [default=20],
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW],
+  updated_at: datetime [default=NOW]
+}
+
+table ProductImages {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  image_url: str,
+  is_primary: bool [default=FALSE],
+  display_order: int [default=0]
+}
+
+table ProductSpecifications {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  spec_name: str,
+  spec_value: str,
+  display_order: int [default=0]
+}
+
+// ============================================================
+// SUPPLIER MANAGEMENT
+// ============================================================
+
+table Suppliers {
+  id: int [pk, autoincrement],
+  supplier_code: str [unique],
+  company_name: str [unique],
+  contact_name: str,
+  email: str [unique],
+  phone: str,
+  address: str,
+  city: str,
+  country: str,
+  tax_id: str [nullable],
+  payment_terms: str [default="Net 30"],
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW]
+}
+
+table ProductSuppliers {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  supplier_id: int [fk],
+  supplier_sku: str,
+  unit_price: double,
+  lead_time_days: int [default=7],
+  min_order_quantity: int [default=1],
+  is_preferred: bool [default=FALSE]
+}
+
+// ============================================================
+// INVENTORY MANAGEMENT
+// ============================================================
+
+table Warehouses {
+  id: int [pk, autoincrement],
+  code: str [unique],
+  name: str,
+  address: str,
+  city: str,
+  country: str,
+  manager_id: int [fk, nullable],
+  capacity: int,
+  is_active: bool [default=TRUE]
+}
+
+table WarehouseLocations {
+  id: int [pk, autoincrement],
+  warehouse_id: int [fk],
+  aisle: str,
+  rack: str,
+  shelf: str,
+  bin: str,
+  location_code: str [unique]
+}
+
+table Inventory {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  warehouse_id: int [fk],
+  location_id: int [fk, nullable],
+  quantity: int [default=0],
+  reserved_quantity: int [default=0],
+  available_quantity: int [default=0],
+  last_counted: datetime [nullable],
+  updated_at: datetime [default=NOW]
+}
+
+table InventoryTransactions {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  warehouse_id: int [fk],
+  transaction_type: str,
+  quantity: int,
+  reference_type: str [nullable],
+  reference_id: int [nullable],
+  employee_id: int [fk],
+  notes: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+// ============================================================
+// PURCHASE ORDERS
+// ============================================================
+
+table PurchaseOrders {
+  id: int [pk, autoincrement],
+  po_number: str [unique],
+  supplier_id: int [fk],
+  warehouse_id: int [fk],
+  employee_id: int [fk],
+  order_date: date [default=NOW],
+  expected_delivery_date: date,
+  actual_delivery_date: date [nullable],
+  status: str [default="draft"],
+  subtotal: double,
+  tax_amount: double,
+  shipping_cost: double [default=0],
+  total_amount: double,
+  notes: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+table PurchaseOrderItems {
+  id: int [pk, autoincrement],
+  purchase_order_id: int [fk],
+  product_id: int [fk],
+  quantity: int,
+  unit_price: double,
+  received_quantity: int [default=0],
+  line_total: double
+}
+
+// ============================================================
+// SALES ORDERS
+// ============================================================
+
+table SalesOrders {
+  id: int [pk, autoincrement],
+  order_number: str [unique],
+  customer_id: int [fk],
+  employee_id: int [fk],
+  order_date: datetime [default=NOW],
+  required_date: date,
+  shipped_date: date [nullable],
+  status: str [default="pending"],
+  payment_status: str [default="unpaid"],
+  payment_method: str [nullable],
+  shipping_address_id: int [fk],
+  billing_address_id: int [fk],
+  subtotal: double,
+  tax_amount: double,
+  discount_amount: double [default=0],
+  shipping_cost: double [default=0],
+  total_amount: double,
+  notes: str [nullable],
+  created_at: datetime [default=NOW]
+}
+
+table SalesOrderItems {
+  id: int [pk, autoincrement],
+  sales_order_id: int [fk],
+  product_id: int [fk],
+  warehouse_id: int [fk],
+  quantity: int,
+  unit_price: double,
+  discount_percent: double [default=0],
+  tax_rate: double [default=0],
+  line_total: double
+}
+
+// ============================================================
+// SHIPPING & LOGISTICS
+// ============================================================
+
+table Shipments {
+  id: int [pk, autoincrement],
+  shipment_number: str [unique],
+  sales_order_id: int [fk],
+  warehouse_id: int [fk],
+  carrier: str,
+  tracking_number: str [nullable],
+  ship_date: datetime [default=NOW],
+  estimated_delivery: date,
+  actual_delivery: date [nullable],
+  status: str [default="preparing"],
+  shipping_cost: double,
+  notes: str [nullable]
+}
+
+table ShipmentItems {
+  id: int [pk, autoincrement],
+  shipment_id: int [fk],
+  sales_order_item_id: int [fk],
+  quantity: int
+}
+
+// ============================================================
+// INVOICING & PAYMENTS
+// ============================================================
+
+table Invoices {
+  id: int [pk, autoincrement],
+  invoice_number: str [unique],
+  sales_order_id: int [fk],
+  customer_id: int [fk],
+  invoice_date: date [default=NOW],
+  due_date: date,
+  paid_date: date [nullable],
+  status: str [default="unpaid"],
+  subtotal: double,
+  tax_amount: double,
+  total_amount: double,
+  amount_paid: double [default=0],
+  balance_due: double,
+  notes: str [nullable]
+}
+
+table Payments {
+  id: int [pk, autoincrement],
+  payment_number: str [unique],
+  invoice_id: int [fk],
+  customer_id: int [fk],
+  payment_date: datetime [default=NOW],
+  payment_method: str,
+  amount: double,
+  reference_number: str [nullable],
+  notes: str [nullable],
+  processed_by: int [fk]
+}
+
+// ============================================================
+// PROMOTIONS & DISCOUNTS
+// ============================================================
+
+table Promotions {
+  id: int [pk, autoincrement],
+  code: str [unique],
+  name: str,
+  description: str [nullable],
+  discount_type: str,
+  discount_value: double,
+  min_purchase_amount: double [default=0],
+  max_discount_amount: double [nullable],
+  start_date: datetime,
+  end_date: datetime,
+  usage_limit: int [nullable],
+  usage_count: int [default=0],
+  is_active: bool [default=TRUE]
+}
+
+table PromotionProducts {
+  promotion_id: int [pk, fk],
+  product_id: int [pk, fk]
+}
+
+table PromotionCustomers {
+  promotion_id: int [pk, fk],
+  customer_id: int [pk, fk]
+}
+
+// ============================================================
+// REVIEWS & RATINGS
+// ============================================================
+
+table ProductReviews {
+  id: int [pk, autoincrement],
+  product_id: int [fk],
+  customer_id: int [fk],
+  rating: float,
+  review_title: str,
+  review_text: str,
+  is_verified_purchase: bool [default=FALSE],
+  is_approved: bool [default=FALSE],
+  helpful_count: int [default=0],
+  created_at: datetime [default=NOW]
+}
+
+// ============================================================
+// RELATIONSHIPS - HR MODULE
+// ============================================================
+
+// Self-referencing: Department hierarchy
+Departments.id > Departments.parent_id
+
+// One-to-Many: Department has many employees
+Departments.id > Employees.department_id
+
+// Self-referencing: Employee manager hierarchy
+Employees.id > Employees.manager_id
+
+// One-to-Many: Employee has many attendance records
+Employees.id > Attendance.employee_id
+
+// ============================================================
+// RELATIONSHIPS - CRM MODULE
+// ============================================================
+
+// One-to-Many: Customer has many addresses
+Customers.id > CustomerAddresses.customer_id
+
+// One-to-Many: Customer has many contacts
+Customers.id > CustomerContacts.customer_id
+
+// ============================================================
+// RELATIONSHIPS - PRODUCT MODULE
+// ============================================================
+
+// Self-referencing: Category hierarchy
+ProductCategories.id > ProductCategories.parent_id
+
+// One-to-Many: Category has many products
+ProductCategories.id > Products.category_id
+
+// One-to-Many: Product has many images
+Products.id > ProductImages.product_id
+
+// One-to-Many: Product has many specifications
+Products.id > ProductSpecifications.product_id
+
+// One-to-Many: Product has many reviews
+Products.id > ProductReviews.product_id
+
+// ============================================================
+// RELATIONSHIPS - SUPPLIER MODULE
+// ============================================================
+
+// Many-to-Many: Products have many suppliers
+Products.id > ProductSuppliers.product_id
+Suppliers.id > ProductSuppliers.supplier_id
+
+// ============================================================
+// RELATIONSHIPS - INVENTORY MODULE
+// ============================================================
+
+// One-to-Many: Warehouse has many locations
+Warehouses.id > WarehouseLocations.warehouse_id
+
+// One-to-Many: Warehouse has many inventory records
+Warehouses.id > Inventory.warehouse_id
+
+// One-to-Many: Product has inventory in multiple warehouses
+Products.id > Inventory.product_id
+
+// One-to-Many: Location has inventory
+WarehouseLocations.id > Inventory.location_id
+
+// One-to-Many: Product has many inventory transactions
+Products.id > InventoryTransactions.product_id
+
+// One-to-Many: Warehouse has many inventory transactions
+Warehouses.id > InventoryTransactions.warehouse_id
+
+// One-to-Many: Employee processes inventory transactions
+Employees.id > InventoryTransactions.employee_id
+
+// One-to-Many: Employee manages warehouse
+Employees.id > Warehouses.manager_id
+
+// ============================================================
+// RELATIONSHIPS - PURCHASE ORDERS
+// ============================================================
+
+// One-to-Many: Supplier has many purchase orders
+Suppliers.id > PurchaseOrders.supplier_id
+
+// One-to-Many: Warehouse receives purchase orders
+Warehouses.id > PurchaseOrders.warehouse_id
+
+// One-to-Many: Employee creates purchase orders
+Employees.id > PurchaseOrders.employee_id
+
+// One-to-Many: Purchase order has many items
+PurchaseOrders.id > PurchaseOrderItems.purchase_order_id
+
+// One-to-Many: Product appears in purchase order items
+Products.id > PurchaseOrderItems.product_id
+
+// ============================================================
+// RELATIONSHIPS - SALES ORDERS
+// ============================================================
+
+// One-to-Many: Customer has many sales orders
+Customers.id > SalesOrders.customer_id
+
+// One-to-Many: Employee processes sales orders
+Employees.id > SalesOrders.employee_id
+
+// One-to-Many: Address used for shipping
+CustomerAddresses.id > SalesOrders.shipping_address_id
+
+// One-to-Many: Address used for billing
+CustomerAddresses.id > SalesOrders.billing_address_id
+
+// One-to-Many: Sales order has many items
+SalesOrders.id > SalesOrderItems.sales_order_id
+
+// One-to-Many: Product appears in sales order items
+Products.id > SalesOrderItems.product_id
+
+// One-to-Many: Warehouse fulfills sales order items
+Warehouses.id > SalesOrderItems.warehouse_id
+
+// ============================================================
+// RELATIONSHIPS - SHIPPING
+// ============================================================
+
+// One-to-Many: Sales order has shipments
+SalesOrders.id > Shipments.sales_order_id
+
+// One-to-Many: Warehouse ships orders
+Warehouses.id > Shipments.warehouse_id
+
+// One-to-Many: Shipment has many items
+Shipments.id > ShipmentItems.shipment_id
+
+// One-to-Many: Sales order item appears in shipments
+SalesOrderItems.id > ShipmentItems.sales_order_item_id
+
+// ============================================================
+// RELATIONSHIPS - INVOICING & PAYMENTS
+// ============================================================
+
+// One-to-Many: Sales order has invoices
+SalesOrders.id > Invoices.sales_order_id
+
+// One-to-Many: Customer has many invoices
+Customers.id > Invoices.customer_id
+
+// One-to-Many: Invoice has many payments
+Invoices.id > Payments.invoice_id
+
+// One-to-Many: Customer makes many payments
+Customers.id > Payments.customer_id
+
+// One-to-Many: Employee processes payments
+Employees.id > Payments.processed_by
+
+// ============================================================
+// RELATIONSHIPS - PROMOTIONS
+// ============================================================
+
+// Many-to-Many: Promotions apply to products
+Promotions.id > PromotionProducts.promotion_id
+Products.id > PromotionProducts.product_id
+
+// Many-to-Many: Promotions available to customers
+Promotions.id > PromotionCustomers.promotion_id
+Customers.id > PromotionCustomers.customer_id
+
+// ============================================================
+// RELATIONSHIPS - REVIEWS
+// ============================================================
+
+// One-to-Many: Customer writes many reviews
+Customers.id > ProductReviews.customer_id

@@ -4,13 +4,15 @@
 
 ## ✨ Features
 
-- 🎨 **Beautiful SVG Output** - Generate clean, scalable vector graphics
-- 🔄 **Force-Directed Layout** - Automatic table positioning using Fruchterman-Reingold algorithm
-- 📊 **Cardinality Notation** - Clear visual indicators (1/M) for relationship types
-- 🎯 **Smart Routing** - Intelligent relationship line routing to avoid overlaps
+- 🎨 **Beautiful SVG Output** - Generate clean, scalable vector graphics using Graphviz
+- 📐 **Hierarchical Layout** - Automatic table positioning with top-to-bottom flow
+- 🔗 **Orthogonal Routing** - Clean, professional relationship lines with right-angle connections
 - 🔍 **Schema Validation** - Built-in validation with helpful error messages
 - ⚡ **Fast & Efficient** - Written in Rust for maximum performance
 - 📝 **Simple Syntax** - Easy-to-learn schema definition language
+- 🎯 **Rich Data Types** - Support for int, string, bool, float, double, date, datetime, time, and blob types
+- 🔑 **Composite Keys** - Full support for composite primary and foreign keys
+- 📊 **Comprehensive Examples** - Includes complex ERP system example
 
 ## 🚀 Installation
 
@@ -43,6 +45,45 @@ cargo build --release
 
 The binary will be available at `target/release/free-erd`
 
+## ⚠️ Prerequisites
+
+### Graphviz Installation Required
+
+**Important**: FreeERD requires Graphviz to be installed on your system for SVG generation.
+
+> **Note**: I apologize for using Graphviz, which is written in C. While FreeERD itself is written in Rust, we currently rely on Graphviz's mature and battle-tested graph rendering capabilities. This dependency may be replaced with a pure Rust solution in the future.
+
+#### Installation Instructions
+
+**Linux (Debian/Ubuntu)**:
+```bash
+sudo apt-get install graphviz
+```
+
+**Linux (Fedora/RHEL)**:
+```bash
+sudo dnf install graphviz
+```
+
+**macOS**:
+```bash
+brew install graphviz
+```
+
+**Windows**:
+- Download the installer from [Graphviz Download Page](https://graphviz.org/download/)
+- Run the installer and add Graphviz to your PATH
+- Or use Chocolatey: `choco install graphviz`
+
+**Verify Installation**:
+```bash
+dot -V
+```
+
+You should see output like: `dot - graphviz version X.X.X`
+
+For more installation options and detailed guides, visit: **https://graphviz.org/download/**
+
 ## 📖 Usage
 
 ### Basic Command
@@ -65,18 +106,20 @@ free-erd run examples/test_schema.frd svg diagram.svg
 title "My Database Schema"
 
 table Users {
-  id: int [pk],
-  name: str,
+  id: int [pk, autoincrement],
+  username: str [unique],
   email: str [unique],
-  created_at: datetime
+  is_active: bool [default=TRUE],
+  created_at: datetime [default=NOW]
 }
 
 table Posts {
-  id: int [pk],
+  id: int [pk, autoincrement],
   user_id: int [fk],
   title: str,
-  content: text,
-  published: bool
+  content: str,
+  published: bool [default=FALSE],
+  created_at: datetime [default=NOW]
 }
 
 Users.id > Posts.user_id
@@ -84,14 +127,18 @@ Users.id > Posts.user_id
 
 ### Data Types
 
-- `int` - Integer
-- `str` - String/VARCHAR
-- `text` - Long text
-- `bool` - Boolean
-- `float` - Floating point number
-- `datetime` - Date and time
+- `int` / `integer` - Integer numbers
+- `str` / `string` - Text strings
+- `bool` / `boolean` - True/false values
+- `float` - Single-precision floating point
+- `double` - Double-precision floating point
+- `datetime` - Date and time combined
 - `date` - Date only
 - `time` - Time only
+- `blob` - Binary large object
+- `tinyblob` - Small binary object
+- `largeblob` - Large binary object
+- Custom types - Any custom database type
 
 ### Field Attributes
 
@@ -99,6 +146,8 @@ Users.id > Posts.user_id
 - `[fk]` - Foreign Key
 - `[unique]` - Unique constraint
 - `[nullable]` - Nullable field
+- `[autoincrement]` - Auto-increment field
+- `[default=value]` - Default value (supports NOW, TRUE, FALSE, NULL, strings, numbers)
 
 ### Relationship Types
 
@@ -123,37 +172,53 @@ Users.id - UserProfiles.user_id  # One-to-one relationship
 
 ## 🎨 Visual Features
 
-### Cardinality Labels
+### Hierarchical Layout
 
-Relationships display clear cardinality indicators:
-- **[1]** - Indicates the "one" side of a relationship
-- **[M]** - Indicates the "many" side of a relationship
-
-Labels appear as white text on black backgrounds at relationship connection points.
-
-### Force-Directed Layout
-
-Tables are automatically positioned using a physics-based algorithm that:
+Tables are automatically positioned using Graphviz's hierarchical layout algorithm:
+- Top-to-bottom flow showing data dependencies
 - Minimizes edge crossings
-- Distributes tables evenly
-- Creates visually balanced diagrams
+- Clean, professional appearance
 - Adapts to schema complexity
 
-### Smart Line Routing
+### Orthogonal Line Routing
 
-Relationship lines intelligently route around tables to:
-- Avoid overlapping with other elements
-- Maintain clear visual paths
-- Use adaptive connection points
-- Group parallel relationships
+Relationship lines use orthogonal (right-angle) routing:
+- Professional, clean appearance
+- Clear visual paths between tables
+- Proper spacing to avoid overlaps
+- Relationship labels positioned clearly on lines
+
+### Relationship Labels
+
+Each relationship displays the connected fields:
+- Format: `SourceTable.field → TargetTable.field`
+- Labels positioned along relationship lines
+- Clear indication of which fields are connected
+
+### Arrow Styles
+
+Different relationship types have distinct visual styles:
+- **One-to-Many**: Crow's foot arrow (→)
+- **Many-to-One**: Crow's foot arrow (←)
+- **Many-to-Many**: Crow's foot arrows on both ends (↔)
+- **One-to-One**: Dashed line with no arrows (--)
 
 ## 📁 Examples
 
 Check out the `examples/` directory for sample schemas:
 
-- `test_schema.frd` - Comprehensive example with various relationship types
-- `composite_keys.frd` - Complex schema with composite keys
+- `test_schema.frd` - Simple blog platform with all relationship types
+- `composite_keys.frd` - Complex schema demonstrating composite primary keys
+- `complex_schema.frd` - Enterprise ERP system with 28 tables and 47 relationships
 - `test_errors.frd` - Examples of validation errors
+- `test_syntax_errors.frd` - Examples of syntax errors
+
+For detailed documentation, see the `documentation/` directory:
+- `README.md` - Complete documentation index
+- `data-types.md` - All supported data types
+- `examples.md` - Real-world schema examples
+- `schema-syntax.md` - Complete syntax reference
+- `relationships.md` - Relationship types guide
 
 ## 🛠️ Development
 
@@ -166,14 +231,12 @@ free-erd/
 │   ├── lexer.rs             # Tokenization
 │   ├── parser.rs            # Syntax parsing
 │   ├── ast.rs               # Abstract Syntax Tree
-│   ├── interpreter.rs       # Schema validation
+│   ├── interpreter.rs       # Schema validation & security
 │   └── svg_generator/       # SVG generation
 │       ├── mod.rs           # Module definition
-│       ├── generator.rs     # Main generator logic
-│       ├── renderer.rs      # SVG rendering
-│       ├── layout.rs        # Layout calculations
-│       └── force_layout.rs  # Force-directed algorithm
+│       └── generator.rs     # Graphviz-based SVG generation
 ├── examples/                # Example schemas
+├── documentation/           # Comprehensive documentation
 └── Cargo.toml              # Project dependencies
 ```
 
@@ -213,7 +276,8 @@ See the [LICENSE](LICENSE) file for details.
 
 - Inspired by the need for simple, beautiful ERD generation
 - Built with Rust for performance and reliability
-- Uses Fruchterman-Reingold algorithm for graph layout
+- Uses Graphviz for professional graph layout and rendering
+- Security-hardened with comprehensive input validation
 
 ## 📞 Support
 
