@@ -1,4 +1,4 @@
-title "Composite Primary Keys Examples"
+#title "Composite Primary Keys Examples"
 
 // Example 1: Many-to-Many Relationship (Junction Table)
 // Students can enroll in multiple courses, courses have multiple students

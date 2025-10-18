@@ -1,0 +1,15 @@
+#title "Demonstration"
+
+
+table Table1 {
+    id: int [pk, autoincrement],
+    table_id: int [fk]
+}
+
+table Table2 {
+    id: int [pk],
+    table_id: int [fk]
+}
+
+
+Table1.table_id <> Table2.table_id

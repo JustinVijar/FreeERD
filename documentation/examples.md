@@ -4,11 +4,17 @@ Real-world schema examples based on actual FreeERD test files and common use cas
 
 ## Table of Contents
 
+### Relational Database Examples
 1. [Simple Blog](#simple-blog)
 2. [Point of Sales System](#point-of-sales-system)
 3. [E-commerce Platform](#e-commerce-platform)
 4. [Social Media Platform](#social-media-platform)
 5. [School Management System](#school-management-system)
+
+### Graph Database Examples
+6. [Social Network](#social-network)
+7. [Knowledge Graph](#knowledge-graph)
+8. [Recommendation System](#recommendation-system)
 
 ## Simple Blog
 
@@ -562,6 +568,192 @@ Classes.id > Attendance.class_id
 
 // One-to-Many: One assignment has many submissions
 Assignments.id > Submissions.assignment_id
+```
+
+## Social Network
+
+A graph database example for a social media platform with users, posts, comments, and relationships.
+
+```
+#title "Social Network Graph"
+
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  email: str [unique],
+  full_name: str,
+  bio: str [nullable],
+  age: int [nullable],
+  created_at: datetime,
+  is_verified: bool [default=FALSE]
+}
+
+node Post {
+  id: int [pk, autoincrement],
+  title: str,
+  content: str,
+  published_at: datetime,
+  view_count: int [default=0],
+  like_count: int [default=0]
+}
+
+node Comment {
+  id: int [pk, autoincrement],
+  text: str,
+  created_at: datetime
+}
+
+node Tag {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable]
+}
+
+node Category {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  slug: str [unique]
+}
+
+// Complex edges with properties
+edge FOLLOWS (from: User, to: User) {
+  since: date,
+  notification_enabled: bool [default=TRUE],
+  interaction_score: float [nullable]
+}
+
+edge AUTHORED (from: User, to: Post) {
+  created_at: datetime,
+  is_pinned: bool [default=FALSE]
+}
+
+edge COMMENTED_ON (from: User, to: Comment) {
+  timestamp: datetime
+}
+
+edge BELONGS_TO (from: Post, to: Category) {
+  assigned_at: datetime,
+  is_primary: bool [default=TRUE]
+}
+
+// Shorthand edges
+User -[LIKES]-> Post
+User -[BOOKMARKS]-> Post
+User -[REPORTS]-> Post
+
+Comment <-[ATTACHED_TO]- Post
+Post <-[TAGGED_WITH]- Tag
+
+// Self-referencing edges
+User <-[FRIENDS_WITH]-> User
+User <-[BLOCKS]-> User
+Post <-[REPLIES_TO]-> Post
+Comment <-[NESTED_IN]-> Comment
+Category <-[RELATED_TO]-> Category
+```
+
+## Knowledge Graph
+
+A knowledge base with concepts, documents, and relationships.
+
+```
+#title "Knowledge Graph"
+
+node Concept {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str,
+  category: str
+}
+
+node Document {
+  id: int [pk, autoincrement],
+  title: str,
+  content: str,
+  author: str,
+  published_date: date
+}
+
+node Topic {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable]
+}
+
+// Relationships between concepts
+Concept <-[RELATED_TO]-> Concept
+Concept <-[SPECIALIZES]-> Concept
+Concept <-[BELONGS_TO]-> Topic
+
+// Document relationships
+Document -[MENTIONS]-> Concept
+Document -[CITES]-> Document
+Document -[BELONGS_TO]-> Topic
+
+// Topic hierarchy
+Topic <-[SUBTOPIC_OF]-> Topic
+```
+
+## Recommendation System
+
+A product recommendation graph with users, products, and preferences.
+
+```
+#title "Product Recommendation Graph"
+
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  age: int [nullable],
+  location: str [nullable]
+}
+
+node Product {
+  id: int [pk, autoincrement],
+  name: str,
+  category: str,
+  price: float,
+  rating: float [nullable]
+}
+
+node Category {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable]
+}
+
+node Brand {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  country: str [nullable]
+}
+
+// User interactions
+edge PURCHASED (from: User, to: Product) {
+  quantity: int,
+  purchase_date: datetime,
+  rating: int [nullable]
+}
+
+edge VIEWED (from: User, to: Product) {
+  view_date: datetime,
+  duration: int  // seconds
+}
+
+edge WISHLISTED (from: User, to: Product) {
+  added_date: datetime
+}
+
+// Product relationships
+Product -[BELONGS_TO]-> Category
+Product -[MANUFACTURED_BY]-> Brand
+
+// Similar products
+Product <-[SIMILAR_TO]-> Product
+
+// User preferences
+User -[INTERESTED_IN]-> Category
+User -[PREFERS]-> Brand
 ```
 
 ## Tips for Creating Your Own Schemas

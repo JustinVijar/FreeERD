@@ -1,14 +1,15 @@
 # Getting Started with FreeERD
 
-Welcome to FreeERD! This guide will help you get up and running with creating beautiful Entity Relationship Diagrams.
+Welcome to FreeERD! This guide will help you get up and running with creating beautiful Entity Relationship Diagrams and graph database schemas.
 
 ## Table of Contents
 
 1. [Installation](#installation)
 2. [Your First Diagram](#your-first-diagram)
-3. [Understanding the Output](#understanding-the-output)
-4. [Basic Concepts](#basic-concepts)
-5. [Next Steps](#next-steps)
+3. [Using the Interactive Window](#using-the-interactive-window)
+4. [Exporting to SVG](#exporting-to-svg)
+5. [Basic Concepts](#basic-concepts)
+6. [Next Steps](#next-steps)
 
 ## Installation
 
@@ -16,6 +17,8 @@ Welcome to FreeERD! This guide will help you get up and running with creating be
 
 - **Rust 1.70 or higher** - [Install Rust](https://www.rust-lang.org/tools/install)
 - **Git** - For cloning the repository
+
+**Note**: FreeERD is 100% pure Rust - no external dependencies like Graphviz required!
 
 ### Building from Source
 
@@ -53,14 +56,14 @@ free-erd help
 
 ## Your First Diagram
 
-Let's create a simple blog database schema.
+Let's create both a relational database schema and a graph database schema.
 
-### Step 1: Create a Schema File
+### Relational Database Example
 
 Create a file named `blog.frd`:
 
 ```
-title "Blog Database"
+#title "Blog Database"
 
 table Users {
   id: int [pk, autoincrement],
@@ -70,22 +73,13 @@ table Users {
   created_at: datetime [default=NOW]
 }
 
-table UserProfiles {
-  id: int [pk, autoincrement],
-  user_id: int [unique, fk],
-  bio: str [nullable],
-  avatar_url: str [nullable],
-  created_at: datetime [default=NOW]
-}
-
 table Posts {
   id: int [pk, autoincrement],
   user_id: int [fk],
   title: str,
   content: str,
   published: bool [default=FALSE],
-  created_at: datetime [default=NOW],
-  updated_at: datetime [default=NOW]
+  created_at: datetime [default=NOW]
 }
 
 table Comments {
@@ -96,24 +90,52 @@ table Comments {
   created_at: datetime [default=NOW]
 }
 
-table Tags {
-  id: int [pk, autoincrement],
-  name: str [unique]
-}
-
-table PostTags {
-  post_id: int [pk, fk],
-  tag_id: int [pk, fk]
-}
-
-// One-to-Many (>): One user has many posts
+// One-to-Many relationships
 Users.id > Posts.user_id
-
-// One-to-Many (>): One user has many comments
 Users.id > Comments.user_id
-
-// One-to-Many (>): One post has many comments
 Posts.id > Comments.post_id
+```
+
+### Graph Database Example
+
+Create a file named `social.frd`:
+
+```
+#title "Social Network"
+
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  email: str [unique]
+}
+
+node Post {
+  id: int [pk, autoincrement],
+  title: str,
+  content: str,
+  created_at: datetime
+}
+
+node Comment {
+  id: int [pk, autoincrement],
+  text: str,
+  created_at: datetime
+}
+
+// Complex edges with properties
+edge AUTHORED (from: User, to: Post) {
+  created_at: datetime
+}
+
+edge COMMENTED_ON (from: User, to: Comment) {
+  timestamp: datetime
+}
+
+// Shorthand edges
+User -[FOLLOWS]-> User
+Comment <-[ATTACHED_TO]- Post
+Post <-[TAGGED_WITH]- Tag
+```
 
 // Many-to-One (<): Many comments belong to one post
 Comments.post_id < Posts.id
@@ -127,7 +149,7 @@ Posts.id <> Tags.id
 
 ### Step 2: Check for Errors
 
-Before generating the diagram, validate your schema:
+Before opening the window, validate your schema:
 
 ```bash
 free-erd check blog.frd
@@ -143,57 +165,111 @@ You should see:
 ✅ Schema is valid!
 
 📊 Schema Statistics:
-  • Tables: 3
-  • Total Columns: 11
-  • Relationships: 3
-  • Primary Keys: 3
-  • Foreign Keys: 3
+  • Tables: 6
+  • Total Columns: 25
+  • Relationships: 6
+  • Primary Keys: 6
+  • Foreign Keys: 6
 ```
 
-### Step 3: Generate the Diagram
+### Step 3: Open in Interactive Window
 
 ```bash
-free-erd run blog.frd svg blog.svg
+free-erd run blog.frd
 ```
 
-You should see:
-```
-📂 Reading file: blog.frd
-🔍 Parsing...
-✅ Parsing successful!
-🔍 Validating schema...
-✅ Schema is valid!
-🎨 Generating SVG diagram...
-📐 Auto-sizing canvas: 2600x1900 for 3 tables (organic layout)
-🔄 Running Fruchterman-Reingold layout algorithm...
-✅ Force-directed layout complete.
-💾 Writing to: blog.svg
-✅ SVG diagram created successfully!
+This opens an interactive window where you can:
+- View your ERD with automatic layout
+- Drag tables to reposition them
+- Drag labels for better readability
+- Zoom in/out with scroll wheel or +/- keys
+- Pan with arrow keys
+- Click tables to highlight their relationships
 
-📊 Output: blog.svg
-```
+### Step 4: Customize and Export
 
-### Step 4: View Your Diagram
+1. **Arrange your diagram**:
+   - Drag tables to desired positions
+   - Move labels to avoid overlaps
+   - Use zoom to focus on specific areas
 
-Open `blog.svg` in your web browser or any SVG viewer. You should see:
-- Three tables (Users, Posts, Comments)
-- Relationship lines connecting them
-- Cardinality labels ([1] and [M]) showing relationship types
-- Automatically positioned tables
+2. **Export to SVG**:
+   - Click the **Export** menu at the top
+   - Select **SVG**
+   - File saved as `export_YYYYMMDD_HHMMSS.svg`
 
-## Understanding the Output
+## Using the Interactive Window
 
-### Cardinality Labels
+### Navigation Controls
 
-FreeERD displays cardinality on relationship lines:
+- **Mouse Scroll** - Zoom in/out
+- **+/- Keys** - Zoom in/out
+- **Arrow Keys** - Pan the view
+- **Left Click + Drag** - Move tables or labels
+- **Left Click on Table** - Highlight the table and its relationships
 
-- **[1]** - Black box with white "1" = "One" side
-- **[M]** - Black box with white "M" = "Many" side
+### Window Layout
+
+The window displays:
+- **Title** - Schema title at the top (draggable)
+- **Tables** - Entity boxes with columns and types
+- **Relationship Lines** - Orthogonal lines connecting tables
+- **Labels** - Relationship information beside lines
+- **Status Bar** - Zoom level and controls at bottom
+- **Menu Bar** - Export options at top
+
+### Tips for Better Layouts
+
+1. **Start with automatic layout** - Let the force-directed algorithm position tables
+2. **Adjust spacing** - Drag tables apart if too crowded
+3. **Group related tables** - Move related tables closer together
+4. **Move labels** - Drag labels away from tables for clarity
+5. **Use zoom** - Zoom out to see the full diagram, zoom in for details
+
+## Exporting to SVG
+
+### Export Process
+
+1. Open your schema: `free-erd run myschema.frd`
+2. Arrange elements as desired
+3. Click **Export > SVG** in the menu
+4. SVG file is created with timestamp
+
+### Export Features
+
+- **Exact positioning** - Preserves your custom layout
+- **All elements included** - Tables, relationships, labels, title
+- **Vector format** - Scales perfectly to any size
+- **Publication ready** - Professional quality output
+
+### File Naming
+
+Exported files use the format: `export_YYYYMMDD_HHMMSS.svg`
+
+Example: `export_20251019_143522.svg`
+
+## Understanding the Visual Elements
+
+### Tables
+
+Each table shows:
+- **Header** - Table name in blue
+- **Columns** - Field name and data type
+- **Attributes** - [pk], [fk], [unique], etc.
 
 ### Relationship Lines
 
-- **Solid lines** - Most relationships
-- **Dashed lines** - One-to-One relationships (using `-` operator)
+- **Orthogonal routing** - Right-angle paths
+- **Crow's feet** - Shows "many" side of relationships
+- **Distributed connections** - Multiple relationships spread along borders
+
+### Relationship Labels
+
+Format: `[1:M] SourceTable.field:TargetTable.field`
+
+- **[1:M]** - Relationship type in gray
+- **Table.field** - Connected fields in white
+- **Pointer line** - Connects label to relationship line
 
 ### Table Layout
 

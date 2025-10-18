@@ -1,4 +1,4 @@
-title "Simple ERD - All Relationship Types"
+#title "Simple ERD - All Relationship Types"
 
 table Users {
   id: int [pk, autoincrement],

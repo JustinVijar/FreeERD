@@ -1,18 +1,17 @@
 # FreeERD
 
-**FreeERD** is a powerful, open-source Entity Relationship Diagram (ERD) generator written in Rust. Create beautiful, professional ERD diagrams from simple text-based schema definitions.
+**FreeERD** is a powerful, open-source diagram generator written in Rust. Create beautiful, professional Entity Relationship Diagrams (ERD) and graph database schemas with an interactive visual editor or export to SVG.
 
 ## ✨ Features
 
-- 🎨 **Beautiful SVG Output** - Generate clean, scalable vector graphics using Graphviz
-- 📐 **Hierarchical Layout** - Automatic table positioning with top-to-bottom flow
-- 🔗 **Orthogonal Routing** - Clean, professional relationship lines with right-angle connections
-- 🔍 **Schema Validation** - Built-in validation with helpful error messages
-- ⚡ **Fast & Efficient** - Written in Rust for maximum performance
-- 📝 **Simple Syntax** - Easy-to-learn schema definition language
-- 🎯 **Rich Data Types** - Support for int, string, bool, float, double, date, datetime, time, and blob types
-- 🔑 **Composite Keys** - Full support for composite primary and foreign keys
-- 📊 **Comprehensive Examples** - Includes complex ERP system example
+- **Interactive Window** - Visualize and interact with your diagrams in real-time
+- **Drag & Drop** - Move tables, nodes, and labels to customize layout
+- **Smart Layout** - Automatic force-directed positioning with collision avoidance
+- **Export to SVG** - Generate publication-ready vector graphics
+- **Zoom & Pan** - Navigate large schemas with ease
+- **Selection Highlighting** - Click entities to highlight their relationships/connections
+- **Orthogonal Routing** - Clean, professional relationship lines
+
 
 ## 🚀 Installation
 
@@ -45,65 +44,65 @@ cargo build --release
 
 The binary will be available at `target/release/free-erd`
 
-## ⚠️ Prerequisites
-
-### Graphviz Installation Required
-
-**Important**: FreeERD requires Graphviz to be installed on your system for SVG generation.
-
-> **Note**: I apologize for using Graphviz, which is written in C. While FreeERD itself is written in Rust, we currently rely on Graphviz's mature and battle-tested graph rendering capabilities. This dependency may be replaced with a pure Rust solution in the future.
-
-#### Installation Instructions
-
-**Linux (Debian/Ubuntu)**:
-```bash
-sudo apt-get install graphviz
-```
-
-**Linux (Fedora/RHEL)**:
-```bash
-sudo dnf install graphviz
-```
-
-**macOS**:
-```bash
-brew install graphviz
-```
-
-**Windows**:
-- Download the installer from [Graphviz Download Page](https://graphviz.org/download/)
-- Run the installer and add Graphviz to your PATH
-- Or use Chocolatey: `choco install graphviz`
-
-**Verify Installation**:
-```bash
-dot -V
-```
-
-You should see output like: `dot - graphviz version X.X.X`
-
-For more installation options and detailed guides, visit: **https://graphviz.org/download/**
-
 ## 📖 Usage
 
-### Basic Command
+### Commands
 
 ```bash
-free-erd run <input-file.frd> svg [output-file.svg]
+# Open interactive window to view and edit diagram
+free-erd run <input-file.frd>
+
+# Validate schema without opening window
+free-erd check <input-file.frd>
+
+# Show help
+free-erd help
+
+# Show version and about information
+free-erd about
 ```
+
+### Interactive Window
+
+The `run` command opens an interactive window where you can:
+
+- **View** your diagram with automatic layout
+- **Drag** tables, nodes, and labels to customize positions
+- **Zoom** in/out using mouse scroll or +/- keys
+- **Pan** using arrow keys or mouse drag
+- **Select** entities to highlight their relationships/connections
+- **Export** to SVG via the Export menu
+
+### Keyboard Controls
+
+- **Scroll Wheel** / **+/-** - Zoom in/out
+- **Arrow Keys** - Pan the view
+- **Mouse Drag** - Move tables and labels
+- **Left Click** - Select table (highlights relationships)
+
+### Export to SVG
+
+1. Open your schema: `free-erd run myschema.frd`
+2. Arrange tables and labels as desired
+3. Click **Export > SVG** in the menu bar
+4. SVG file will be saved with timestamp (e.g., `export_20251019_143022.svg`)
 
 ### Example
 
 ```bash
-free-erd run examples/test_schema.frd svg diagram.svg
+# Validate a schema
+free-erd check examples/test_schema.frd
+
+# Open in interactive window
+free-erd run examples/test_schema.frd
 ```
 
 ## 📝 Schema Syntax
 
-### Basic Structure
+### Relational Database (ERD) Example
 
 ```
-title "My Database Schema"
+#title "My Database Schema"
 
 table Users {
   id: int [pk, autoincrement],
@@ -116,13 +115,42 @@ table Users {
 table Posts {
   id: int [pk, autoincrement],
   user_id: int [fk],
-  title: str,
+  post_title: str,
   content: str,
   published: bool [default=FALSE],
   created_at: datetime [default=NOW]
 }
 
 Users.id > Posts.user_id
+```
+
+### Graph Database Example (not working on window)
+
+```
+#title "Social Network Graph"
+
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  email: str [unique]
+}
+
+node Post {
+  id: int [pk, autoincrement],
+  content: str,
+  created_at: datetime
+}
+
+edge FOLLOWS (from: User, to: User) {
+  since: date
+}
+
+edge AUTHORED (from: User, to: Post) {
+  created_at: datetime
+}
+
+// Shorthand syntax
+User -[LIKES]-> Post
 ```
 
 ### Data Types
@@ -172,36 +200,62 @@ Users.id - UserProfiles.user_id  # One-to-one relationship
 
 ## 🎨 Visual Features
 
-### Hierarchical Layout
+### Interactive Window
 
-Tables are automatically positioned using Graphviz's hierarchical layout algorithm:
-- Top-to-bottom flow showing data dependencies
-- Minimizes edge crossings
-- Clean, professional appearance
-- Adapts to schema complexity
+FreeERD provides a modern, interactive window for visualizing and editing your ERD:
+
+- **Real-time Rendering** - See your schema come to life instantly
+- **Draggable Elements** - Move tables and labels with your mouse
+- **Zoom Controls** - Scroll to zoom in/out, +/- keys also work
+- **Pan Navigation** - Arrow keys to navigate, or drag the canvas
+- **Selection Highlighting** - Click any table to highlight its relationships
+- **Customizable Layout** - Arrange elements exactly how you want them
+
+### Force-Directed Layout
+
+Tables are automatically positioned using a sophisticated force-directed algorithm:
+
+- **Collision Avoidance** - Tables never overlap
+- **Natural Spacing** - Related tables positioned closer together
+- **Hierarchical Flow** - Top-to-bottom organization based on relationships
+- **Adaptive Positioning** - Adjusts to schema complexity
 
 ### Orthogonal Line Routing
 
-Relationship lines use orthogonal (right-angle) routing:
-- Professional, clean appearance
-- Clear visual paths between tables
-- Proper spacing to avoid overlaps
-- Relationship labels positioned clearly on lines
+Relationship lines use smart orthogonal (right-angle) routing:
+
+- **Professional Appearance** - Clean, right-angle paths between tables
+- **Collision Avoidance** - Lines avoid overlapping with tables
+- **Distributed Connection Points** - Multiple relationships spread along table borders
+- **Clear Visual Paths** - Easy to trace relationships
 
 ### Relationship Labels
 
-Each relationship displays the connected fields:
-- Format: `SourceTable.field → TargetTable.field`
-- Labels positioned along relationship lines
-- Clear indication of which fields are connected
+Each relationship displays comprehensive information:
 
-### Arrow Styles
+- **Format**: `[1:M] SourceTable.field:TargetTable.field`
+- **Collision Avoidance** - Labels positioned to avoid overlaps with tables and other labels
+- **Pointer Lines** - Visual indicator connecting label to its relationship line
+- **Draggable** - Reposition labels for optimal readability
+- **Color-Coded** - Relationship type ([1:M]) in gray, field names in white
 
-Different relationship types have distinct visual styles:
-- **One-to-Many**: Crow's foot arrow (→)
-- **Many-to-One**: Crow's foot arrow (←)
-- **Many-to-Many**: Crow's foot arrows on both ends (↔)
-- **One-to-One**: Dashed line with no arrows (--)
+### Visual Relationship Types
+
+Different relationship types have distinct visual representations:
+
+- **One-to-Many (>)**: Single line with crow's foot at the "many" end
+- **Many-to-One (<)**: Crow's foot at the "many" end
+- **Many-to-Many (<>)**: Crow's feet at both ends
+- **One-to-One (-)**: Single line with no crow's feet
+
+### SVG Export
+
+The export feature creates pixel-perfect SVG files:
+
+- **Exact Positioning** - Exports current window state including custom positioning
+- **Vector Graphics** - Scalable to any size without quality loss
+- **Complete Rendering** - All tables, relationships, labels, and title included
+- **Professional Quality** - Publication-ready output
 
 ## 📁 Examples
 
@@ -232,9 +286,11 @@ free-erd/
 │   ├── parser.rs            # Syntax parsing
 │   ├── ast.rs               # Abstract Syntax Tree
 │   ├── interpreter.rs       # Schema validation & security
-│   └── svg_generator/       # SVG generation
+│   └── renderer/            # Interactive renderer (pure Rust)
 │       ├── mod.rs           # Module definition
-│       └── generator.rs     # Graphviz-based SVG generation
+│       ├── canvas.rs        # Main rendering & interaction logic
+│       ├── graph.rs         # ERD graph data structures
+│       └── layout.rs        # Force-directed layout engine
 ├── examples/                # Example schemas
 ├── documentation/           # Comprehensive documentation
 └── Cargo.toml              # Project dependencies
@@ -253,8 +309,16 @@ cargo build --release
 cargo test
 
 # Run with example
-cargo run -- run examples/test_schema.frd svg
+cargo run -- run examples/test_schema.frd
 ```
+
+### Key Technologies
+
+- **egui** - Immediate mode GUI framework
+- **eframe** - egui framework for desktop applications
+- **petgraph** - Graph data structures for ERD representation
+- **Force-directed layout** - Custom implementation for automatic positioning
+- **Orthogonal routing** - Custom algorithm for clean relationship lines
 
 ## 🤝 Contributing
 
@@ -276,8 +340,9 @@ See the [LICENSE](LICENSE) file for details.
 
 - Inspired by the need for simple, beautiful ERD generation
 - Built with Rust for performance and reliability
-- Uses Graphviz for professional graph layout and rendering
+- Uses egui for interactive, cross-platform GUI
 - Security-hardened with comprehensive input validation
+- **100% Pure Rust** - No external dependencies required
 
 ## 📞 Support
 

@@ -12,6 +12,10 @@ pub enum ValidationError {
     DuplicateColumn { table: String, column: String, span: Option<Span> },
     TableNotFound { name: String, span: Option<Span> },
     ColumnNotFound { table: String, column: String, span: Option<Span> },
+    DuplicateNode { name: String, span: Option<Span> },
+    DuplicateNodeField { node: String, field: String, span: Option<Span> },
+    NodeNotFound { name: String, span: Option<Span> },
+    DuplicateEdge { name: String, span: Option<Span> },
 }
 
 impl std::fmt::Display for ValidationError {
@@ -29,6 +33,18 @@ impl std::fmt::Display for ValidationError {
             ValidationError::ColumnNotFound { table, column, .. } => {
                 write!(f, "Column '{}' not found in table '{}'", column, table)
             }
+            ValidationError::DuplicateNode { name, .. } => {
+                write!(f, "Duplicate node definition: {}", name)
+            }
+            ValidationError::DuplicateNodeField { node, field, .. } => {
+                write!(f, "Duplicate field '{}' in node '{}'", field, node)
+            }
+            ValidationError::NodeNotFound { name, .. } => {
+                write!(f, "Node '{}' not found", name)
+            }
+            ValidationError::DuplicateEdge { name, .. } => {
+                write!(f, "Duplicate edge definition: {}", name)
+            }
         }
     }
 }
@@ -40,6 +56,10 @@ impl ValidationError {
             ValidationError::DuplicateColumn { span, .. } => *span,
             ValidationError::TableNotFound { span, .. } => *span,
             ValidationError::ColumnNotFound { span, .. } => *span,
+            ValidationError::DuplicateNode { span, .. } => *span,
+            ValidationError::DuplicateNodeField { span, .. } => *span,
+            ValidationError::NodeNotFound { span, .. } => *span,
+            ValidationError::DuplicateEdge { span, .. } => *span,
         }
     }
     
@@ -93,6 +113,16 @@ impl Interpreter {
         
         // Validate relationships
         if let Err(e) = self.validate_relationships() {
+            errors.extend(e);
+        }
+        
+        // Validate nodes
+        if let Err(e) = self.validate_nodes() {
+            errors.extend(e);
+        }
+        
+        // Validate edges
+        if let Err(e) = self.validate_edges() {
             errors.extend(e);
         }
         
@@ -195,6 +225,80 @@ impl Interpreter {
         }
     }
     
+    fn validate_nodes(&self) -> Result<(), Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        let mut node_names = HashSet::new();
+        
+        for node in &self.schema.nodes {
+            // Check for duplicate nodes
+            if !node_names.insert(&node.name) {
+                errors.push(ValidationError::DuplicateNode {
+                    name: node.name.clone(),
+                    span: node.span,
+                });
+                continue;
+            }
+            
+            // Check for duplicate fields
+            let mut field_names = HashSet::new();
+            for field in &node.fields {
+                if !field_names.insert(&field.name) {
+                    errors.push(ValidationError::DuplicateNodeField {
+                        node: node.name.clone(),
+                        field: field.name.clone(),
+                        span: field.span,
+                    });
+                }
+            }
+        }
+        
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+    
+    fn validate_edges(&self) -> Result<(), Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        let mut edge_names = HashSet::new();
+        let node_map: HashMap<_, _> = self.schema.nodes.iter()
+            .map(|n| (&n.name, n))
+            .collect();
+        
+        for edge in &self.schema.edges {
+            // Check for duplicate edges
+            if !edge_names.insert(&edge.name) {
+                errors.push(ValidationError::DuplicateEdge {
+                    name: edge.name.clone(),
+                    span: edge.span,
+                });
+                continue;
+            }
+            
+            // Check if nodes exist
+            if !node_map.contains_key(&edge.from_node) {
+                errors.push(ValidationError::NodeNotFound {
+                    name: edge.from_node.clone(),
+                    span: edge.span,
+                });
+            }
+            
+            if !node_map.contains_key(&edge.to_node) {
+                errors.push(ValidationError::NodeNotFound {
+                    name: edge.to_node.clone(),
+                    span: edge.span,
+                });
+            }
+        }
+        
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+    
     pub fn get_statistics(&self) -> SchemaStatistics {
         let total_columns: usize = self.schema.tables.iter()
             .map(|t| t.columns.len())
@@ -210,12 +314,24 @@ impl Interpreter {
             .filter(|c| c.is_foreign_key())
             .count();
         
+        let total_node_fields: usize = self.schema.nodes.iter()
+            .map(|n| n.fields.len())
+            .sum();
+        
+        let total_edge_properties: usize = self.schema.edges.iter()
+            .map(|e| e.properties.len())
+            .sum();
+        
         SchemaStatistics {
             table_count: self.schema.tables.len(),
             total_columns,
             relationship_count: self.schema.relationships.len(),
             primary_keys,
             foreign_keys,
+            node_count: self.schema.nodes.len(),
+            total_node_fields,
+            edge_count: self.schema.edges.len(),
+            total_edge_properties,
         }
     }
 }
@@ -227,6 +343,10 @@ pub struct SchemaStatistics {
     pub relationship_count: usize,
     pub primary_keys: usize,
     pub foreign_keys: usize,
+    pub node_count: usize,
+    pub total_node_fields: usize,
+    pub edge_count: usize,
+    pub total_edge_properties: usize,
 }
 
 impl SchemaStatistics {
@@ -237,6 +357,10 @@ impl SchemaStatistics {
         println!("  Relationships: {}", self.relationship_count);
         println!("  Primary Keys: {}", self.primary_keys);
         println!("  Foreign Keys: {}", self.foreign_keys);
+        println!("  Nodes: {}", self.node_count);
+        println!("  Node Fields: {}", self.total_node_fields);
+        println!("  Edges: {}", self.edge_count);
+        println!("  Edge Properties: {}", self.total_edge_properties);
     }
 }
 
@@ -268,6 +392,8 @@ mod tests {
                 ]),
             ],
             relationships: vec![],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -283,6 +409,8 @@ mod tests {
                 create_test_table("Users", vec![]),
             ],
             relationships: vec![],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -305,6 +433,8 @@ mod tests {
                 ]),
             ],
             relationships: vec![],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -335,6 +465,8 @@ mod tests {
                     span: None,
                 },
             ],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -367,6 +499,8 @@ mod tests {
                     span: None,
                 },
             ],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -401,6 +535,8 @@ mod tests {
                     span: None,
                 },
             ],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -440,6 +576,8 @@ mod tests {
                 create_test_table("Users", vec![]), // Duplicate table
             ],
             relationships: vec![],
+            nodes: vec![],
+            edges: vec![],
         };
 
         let interpreter = Interpreter::new(schema);
@@ -448,5 +586,161 @@ mod tests {
         
         let errors = result.unwrap_err();
         assert!(errors.len() >= 2); // At least duplicate table and column errors
+    }
+    
+    #[test]
+    fn test_valid_nodes_and_edges() {
+        let schema = Schema {
+            title: None,
+            tables: vec![],
+            relationships: vec![],
+            nodes: vec![
+                Node {
+                    name: "Person".to_string(),
+                    fields: vec![
+                        NodeField {
+                            name: "id".to_string(),
+                            datatype: DataType::Int,
+                            attributes: vec![Attribute::PrimaryKey],
+                            span: None,
+                        },
+                    ],
+                    span: None,
+                },
+                Node {
+                    name: "Company".to_string(),
+                    fields: vec![],
+                    span: None,
+                },
+            ],
+            edges: vec![
+                Edge {
+                    name: "WORKS_AT".to_string(),
+                    from_node: "Person".to_string(),
+                    to_node: "Company".to_string(),
+                    edge_type: EdgeType::Outgoing,
+                    properties: vec![],
+                    attributes: vec![],
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        assert!(interpreter.validate().is_ok());
+    }
+    
+    #[test]
+    fn test_duplicate_node() {
+        let schema = Schema {
+            title: None,
+            tables: vec![],
+            relationships: vec![],
+            nodes: vec![
+                Node {
+                    name: "Person".to_string(),
+                    fields: vec![],
+                    span: None,
+                },
+                Node {
+                    name: "Person".to_string(),
+                    fields: vec![],
+                    span: None,
+                },
+            ],
+            edges: vec![],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(errors[0], ValidationError::DuplicateNode { .. }));
+    }
+    
+    #[test]
+    fn test_node_not_found_in_edge() {
+        let schema = Schema {
+            title: None,
+            tables: vec![],
+            relationships: vec![],
+            nodes: vec![],
+            edges: vec![
+                Edge {
+                    name: "WORKS_AT".to_string(),
+                    from_node: "Person".to_string(),
+                    to_node: "Company".to_string(),
+                    edge_type: EdgeType::Outgoing,
+                    properties: vec![],
+                    attributes: vec![],
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let result = interpreter.validate();
+        assert!(result.is_err());
+        
+        let errors = result.unwrap_err();
+        assert!(errors.len() >= 2); // Both nodes not found
+        assert!(errors.iter().any(|e| matches!(e, ValidationError::NodeNotFound { .. })));
+    }
+    
+    #[test]
+    fn test_statistics_with_nodes_and_edges() {
+        let schema = Schema {
+            title: None,
+            tables: vec![],
+            relationships: vec![],
+            nodes: vec![
+                Node {
+                    name: "Person".to_string(),
+                    fields: vec![
+                        NodeField {
+                            name: "id".to_string(),
+                            datatype: DataType::Int,
+                            attributes: vec![],
+                            span: None,
+                        },
+                        NodeField {
+                            name: "name".to_string(),
+                            datatype: DataType::String,
+                            attributes: vec![],
+                            span: None,
+                        },
+                    ],
+                    span: None,
+                },
+            ],
+            edges: vec![
+                Edge {
+                    name: "KNOWS".to_string(),
+                    from_node: "Person".to_string(),
+                    to_node: "Person".to_string(),
+                    edge_type: EdgeType::Bidirectional,
+                    properties: vec![
+                        EdgeProperty {
+                            name: "since".to_string(),
+                            datatype: DataType::Date,
+                            attributes: vec![],
+                            span: None,
+                        },
+                    ],
+                    attributes: vec![],
+                    span: None,
+                },
+            ],
+        };
+
+        let interpreter = Interpreter::new(schema);
+        let stats = interpreter.get_statistics();
+        
+        assert_eq!(stats.node_count, 1);
+        assert_eq!(stats.total_node_fields, 2);
+        assert_eq!(stats.edge_count, 1);
+        assert_eq!(stats.total_edge_properties, 1);
     }
 }

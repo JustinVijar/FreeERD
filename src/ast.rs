@@ -6,6 +6,8 @@ pub struct Schema {
     pub title: Option<String>,
     pub tables: Vec<Table>,
     pub relationships: Vec<Relationship>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
 }
 
 impl Schema {
@@ -14,6 +16,8 @@ impl Schema {
             title: None,
             tables: Vec::new(),
             relationships: Vec::new(),
+            nodes: Vec::new(),
+            edges: Vec::new(),
         }
     }
 }
@@ -69,6 +73,7 @@ pub enum DataType {
     Bool,
     Double,
     Float,
+    Decimal,
     Date,
     Time,
     DateTime,
@@ -86,6 +91,7 @@ impl DataType {
             "bool" | "boolean" => DataType::Bool,
             "double" => DataType::Double,
             "float" => DataType::Float,
+            "decimal" => DataType::Decimal,
             "date" => DataType::Date,
             "time" => DataType::Time,
             "datetime" => DataType::DateTime,
@@ -105,6 +111,7 @@ impl fmt::Display for DataType {
             DataType::Bool => write!(f, "bool"),
             DataType::Double => write!(f, "double"),
             DataType::Float => write!(f, "float"),
+            DataType::Decimal => write!(f, "decimal"),
             DataType::Date => write!(f, "date"),
             DataType::Time => write!(f, "time"),
             DataType::DateTime => write!(f, "datetime"),
@@ -122,6 +129,7 @@ pub enum Attribute {
     ForeignKey,
     Unique,
     Nullable,
+    Indexed,
     Default(DefaultValue),
     AutoIncrement,
 }
@@ -133,6 +141,7 @@ impl fmt::Display for Attribute {
             Attribute::ForeignKey => write!(f, "fk"),
             Attribute::Unique => write!(f, "unique"),
             Attribute::Nullable => write!(f, "nullable"),
+            Attribute::Indexed => write!(f, "indexed"),
             Attribute::Default(v) => write!(f, "default={}", v),
             Attribute::AutoIncrement => write!(f, "autoincrement"),
         }
@@ -187,6 +196,117 @@ impl fmt::Display for RelationshipType {
             RelationshipType::ManyToOne => write!(f, "many-to-one"),
             RelationshipType::ManyToMany => write!(f, "many-to-many"),
             RelationshipType::OneToOne => write!(f, "one-to-one"),
+        }
+    }
+}
+
+// Node structure for graph databases
+#[derive(Debug, Clone, PartialEq)]
+pub struct Node {
+    pub name: String,
+    pub fields: Vec<NodeField>,
+    pub span: Option<Span>,
+}
+
+impl Node {
+    pub fn with_span(name: String, span: Span) -> Self {
+        Node {
+            name,
+            fields: Vec::new(),
+            span: Some(span),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeField {
+    pub name: String,
+    pub datatype: DataType,
+    pub attributes: Vec<Attribute>,
+    pub span: Option<Span>,
+}
+
+impl NodeField {
+    pub fn with_span(name: String, datatype: DataType, span: Span) -> Self {
+        NodeField {
+            name,
+            datatype,
+            attributes: Vec::new(),
+            span: Some(span),
+        }
+    }
+}
+
+// Edge structure for graph databases
+#[derive(Debug, Clone, PartialEq)]
+pub struct Edge {
+    pub name: String,
+    pub from_node: String,
+    pub to_node: String,
+    pub edge_type: EdgeType,
+    pub properties: Vec<EdgeProperty>,
+    pub attributes: Vec<Attribute>,
+    pub span: Option<Span>,
+}
+
+impl Edge {
+    pub fn new(name: String, from_node: String, to_node: String, edge_type: EdgeType) -> Self {
+        Edge {
+            name,
+            from_node,
+            to_node,
+            edge_type,
+            properties: Vec::new(),
+            attributes: Vec::new(),
+            span: None,
+        }
+    }
+
+    pub fn with_span(name: String, from_node: String, to_node: String, edge_type: EdgeType, span: Span) -> Self {
+        Edge {
+            name,
+            from_node,
+            to_node,
+            edge_type,
+            properties: Vec::new(),
+            attributes: Vec::new(),
+            span: Some(span),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EdgeProperty {
+    pub name: String,
+    pub datatype: DataType,
+    pub attributes: Vec<Attribute>,
+    pub span: Option<Span>,
+}
+
+impl EdgeProperty {
+    pub fn with_span(name: String, datatype: DataType, span: Span) -> Self {
+        EdgeProperty {
+            name,
+            datatype,
+            attributes: Vec::new(),
+            span: Some(span),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EdgeType {
+    Outgoing,       // -[]->
+    Incoming,       // <-[]-
+    Bidirectional,  // <-[]->
+}
+
+impl fmt::Display for EdgeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EdgeType::Outgoing => write!(f, "outgoing"),
+            EdgeType::Incoming => write!(f, "incoming"),
+            EdgeType::Bidirectional => write!(f, "bidirectional"),
         }
     }
 }
@@ -288,5 +408,48 @@ mod tests {
     fn test_relationship_type_equality() {
         assert_eq!(RelationshipType::OneToMany, RelationshipType::OneToMany);
         assert_ne!(RelationshipType::OneToMany, RelationshipType::ManyToOne);
+    }
+    
+    #[test]
+    fn test_decimal_datatype() {
+        assert_eq!(DataType::Decimal.to_string(), "decimal");
+        assert_eq!(DataType::from_str("decimal"), DataType::Decimal);
+    }
+    
+    #[test]
+    fn test_indexed_attribute() {
+        assert_eq!(Attribute::Indexed.to_string(), "indexed");
+    }
+    
+    #[test]
+    fn test_node_creation() {
+        let span = Span { line: 1, column: 1, length: 10 };
+        let node = Node::with_span("Person".to_string(), span);
+        assert_eq!(node.name, "Person");
+        assert_eq!(node.fields.len(), 0);
+        assert!(node.span.is_some());
+    }
+    
+    #[test]
+    fn test_edge_creation() {
+        let span = Span { line: 1, column: 1, length: 10 };
+        let edge = Edge::with_span(
+            "WORKS_AT".to_string(),
+            "Person".to_string(),
+            "Company".to_string(),
+            EdgeType::Outgoing,
+            span
+        );
+        assert_eq!(edge.name, "WORKS_AT");
+        assert_eq!(edge.from_node, "Person");
+        assert_eq!(edge.to_node, "Company");
+        assert_eq!(edge.edge_type, EdgeType::Outgoing);
+    }
+    
+    #[test]
+    fn test_edge_type_display() {
+        assert_eq!(EdgeType::Outgoing.to_string(), "outgoing");
+        assert_eq!(EdgeType::Incoming.to_string(), "incoming");
+        assert_eq!(EdgeType::Bidirectional.to_string(), "bidirectional");
     }
 }

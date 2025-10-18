@@ -30,6 +30,8 @@ pub enum Token {
     // Keywords
     Title,
     Table,
+    Edge,
+    Node,
     
     // Identifiers and Literals
     Identifier(String),
@@ -42,6 +44,11 @@ pub enum Token {
     ManyToMany,     // <>
     OneToOne,       // -
     
+    // Edge Operators
+    OutgoingEdge,       // -[]->
+    IncomingEdge,       // <-[]-
+    BidirectionalEdge,  // <-[]->
+    
     // Punctuation
     Colon,          // :
     Comma,          // ,
@@ -50,6 +57,8 @@ pub enum Token {
     RightBrace,     // }
     LeftBracket,    // [
     RightBracket,   // ]
+    LeftParen,      // (
+    RightParen,     // )
     Equals,         // =
     
     // Special
@@ -61,8 +70,10 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Token::Title => write!(f, "TITLE"),
+            Token::Title => write!(f, "#title"),
             Token::Table => write!(f, "TABLE"),
+            Token::Edge => write!(f, "EDGE"),
+            Token::Node => write!(f, "NODE"),
             Token::Identifier(s) => write!(f, "IDENTIFIER({})", s),
             Token::String(s) => write!(f, "STRING(\"{}\")", s),
             Token::Number(n) => write!(f, "NUMBER({})", n),
@@ -70,6 +81,9 @@ impl fmt::Display for Token {
             Token::ManyToOne => write!(f, "<"),
             Token::ManyToMany => write!(f, "<>"),
             Token::OneToOne => write!(f, "-"),
+            Token::OutgoingEdge => write!(f, "-[]->"),
+            Token::IncomingEdge => write!(f, "<-[]-"),
+            Token::BidirectionalEdge => write!(f, "<-[]->"),
             Token::Colon => write!(f, ":"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
@@ -77,6 +91,8 @@ impl fmt::Display for Token {
             Token::RightBrace => write!(f, "}}"),
             Token::LeftBracket => write!(f, "["),
             Token::RightBracket => write!(f, "]"),
+            Token::LeftParen => write!(f, "("),
+            Token::RightParen => write!(f, ")"),
             Token::Equals => write!(f, "="),
             Token::Comment(s) => write!(f, "COMMENT({})", s),
             Token::Newline => write!(f, "NEWLINE"),
@@ -260,6 +276,16 @@ impl Lexer {
                     tokens.push(Spanned::new(Token::RightBracket, span));
                     self.advance();
                 }
+                '(' => {
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::LeftParen, span));
+                    self.advance();
+                }
+                ')' => {
+                    let span = self.current_span(1);
+                    tokens.push(Spanned::new(Token::RightParen, span));
+                    self.advance();
+                }
                 '=' => {
                     let span = self.current_span(1);
                     tokens.push(Spanned::new(Token::Equals, span));
@@ -272,6 +298,33 @@ impl Lexer {
                     let length = self.column - start_col;
                     let span = Span::new(start_line, start_col, length);
                     tokens.push(Spanned::new(Token::Comment(comment), span));
+                }
+                '#' if self.peek(1) == Some('t') && self.peek(2) == Some('i') 
+                    && self.peek(3) == Some('t') && self.peek(4) == Some('l')
+                    && self.peek(5) == Some('e') => {
+                    // #title
+                    let span = self.current_span(6);
+                    tokens.push(Spanned::new(Token::Title, span));
+                    for _ in 0..6 { self.advance(); }
+                }
+                '#' => {
+                    // Unknown directive, skip it
+                    self.advance();
+                }
+                '<' if self.peek(1) == Some('-') && self.peek(2) == Some('[') 
+                    && self.peek(3) == Some(']') && self.peek(4) == Some('-')
+                    && self.peek(5) == Some('>') => {
+                    // <-[]->
+                    let span = self.current_span(6);
+                    tokens.push(Spanned::new(Token::BidirectionalEdge, span));
+                    for _ in 0..6 { self.advance(); }
+                }
+                '<' if self.peek(1) == Some('-') && self.peek(2) == Some('[') 
+                    && self.peek(3) == Some(']') && self.peek(4) == Some('-') => {
+                    // <-[]-
+                    let span = self.current_span(5);
+                    tokens.push(Spanned::new(Token::IncomingEdge, span));
+                    for _ in 0..5 { self.advance(); }
                 }
                 '<' if self.peek(1) == Some('>') => {
                     let span = self.current_span(2);
@@ -288,6 +341,13 @@ impl Lexer {
                     let span = self.current_span(1);
                     tokens.push(Spanned::new(Token::OneToMany, span));
                     self.advance();
+                }
+                '-' if self.peek(1) == Some('[') && self.peek(2) == Some(']') 
+                    && self.peek(3) == Some('-') && self.peek(4) == Some('>') => {
+                    // -[]->
+                    let span = self.current_span(5);
+                    tokens.push(Spanned::new(Token::OutgoingEdge, span));
+                    for _ in 0..5 { self.advance(); }
                 }
                 '-' if !self.peek(1).map(|c| c.is_numeric()).unwrap_or(false) => {
                     let span = self.current_span(1);
@@ -309,8 +369,9 @@ impl Lexer {
                     let length = self.column - start_col;
                     let span = Span::new(start_line, start_col, length);
                     let token = match ident.to_lowercase().as_str() {
-                        "title" => Token::Title,
                         "table" => Token::Table,
+                        "edge" => Token::Edge,
+                        "node" => Token::Node,
                         _ => Token::Identifier(ident),
                     };
                     tokens.push(Spanned::new(token, span));
@@ -334,7 +395,7 @@ mod tests {
     
     #[test]
     fn test_basic_tokenization() {
-        let input = r#"title "My ERD""#;
+        let input = r#"#title "My ERD""#;
         let mut lexer = Lexer::new(input);
         let tokens = lexer.tokenize();
         
@@ -351,5 +412,54 @@ mod tests {
         assert_eq!(tokens[0].value, Token::Table);
         assert_eq!(tokens[1].value, Token::Identifier("Products".to_string()));
         assert_eq!(tokens[2].value, Token::LeftBrace);
+    }
+    
+    #[test]
+    fn test_node_tokenization() {
+        let input = r#"node Person { name: string }"#;
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize();
+        
+        assert_eq!(tokens[0].value, Token::Node);
+        assert_eq!(tokens[1].value, Token::Identifier("Person".to_string()));
+        assert_eq!(tokens[2].value, Token::LeftBrace);
+    }
+    
+    #[test]
+    fn test_edge_tokenization() {
+        let input = r#"edge WORKS_AT (from: Person, to: Company)"#;
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize();
+        
+        assert_eq!(tokens[0].value, Token::Edge);
+        assert_eq!(tokens[1].value, Token::Identifier("WORKS_AT".to_string()));
+        assert_eq!(tokens[2].value, Token::LeftParen);
+        assert_eq!(tokens[3].value, Token::Identifier("from".to_string()));
+        assert_eq!(tokens[4].value, Token::Colon);
+    }
+    
+    #[test]
+    fn test_edge_operators() {
+        let input = r#"-[]-> <-[]- <-[]->"#;
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize();
+        
+        assert_eq!(tokens[0].value, Token::OutgoingEdge);
+        assert_eq!(tokens[1].value, Token::IncomingEdge);
+        assert_eq!(tokens[2].value, Token::BidirectionalEdge);
+    }
+    
+    #[test]
+    fn test_parentheses() {
+        let input = r#"(from: String)"#;
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize();
+        
+        // Tokens should be: LeftParen, Identifier("from"), Colon, Identifier("String"), RightParen, EOF
+        assert_eq!(tokens[0].value, Token::LeftParen);
+        assert_eq!(tokens[1].value, Token::Identifier("from".to_string()));
+        assert_eq!(tokens[2].value, Token::Colon);
+        assert_eq!(tokens[3].value, Token::Identifier("String".to_string()));
+        assert_eq!(tokens[4].value, Token::RightParen);
     }
 }

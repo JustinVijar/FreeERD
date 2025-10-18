@@ -1,4 +1,4 @@
-title "Syntax Error Test"
+#title "Syntax Error Test"
 
 // Missing colon after column name
 table Users {

@@ -1,0 +1,90 @@
+#title "Graph Database - Social Network Example"
+
+// Node definitions with various datatypes
+node User {
+    id: int [pk, autoincrement],
+    username: string [unique, indexed],
+    email: string [unique],
+    full_name: string,
+    age: int [nullable],
+    balance: decimal [nullable],
+    created_at: datetime,
+    is_verified: bool
+}
+
+node Post {
+    id: int [pk, autoincrement],
+    post_title: string,
+    content: string,
+    published_at: datetime,
+    view_count: int,
+    rating: float [nullable]
+}
+
+node Comment {
+    id: int [pk, autoincrement],
+    text: string,
+    created_at: datetime
+}
+
+node Tag {
+    id: int [pk, autoincrement],
+    name: string [unique, indexed],
+    description: string [nullable]
+}
+
+node Category {
+    id: int [pk, autoincrement],
+    name: string [unique],
+    slug: string [unique, indexed]
+}
+
+// Complex edges with properties (bidirectional by default)
+edge FOLLOWS (from: User, to: User) {
+    since: date,
+    notification_enabled: bool,
+    interaction_score: float [nullable]
+}
+
+edge AUTHORED (from: User, to: Post) {
+    created_at: datetime,
+    revision_count: int,
+    is_pinned: bool [nullable]
+}
+
+edge COMMENTED_ON (from: User, to: Comment) {
+    timestamp: datetime
+}
+
+edge BELONGS_TO (from: Post, to: Category) {
+    assigned_at: datetime,
+    is_primary: bool
+}
+
+// Shorthand edges - outgoing (->)
+User -[LIKES]-> Post
+User -[BOOKMARKS]-> Post
+User -[REPORTS]-> Post
+
+// Shorthand edges - incoming (<-)
+Comment <-[ATTACHED_TO]- Post
+Post <-[TAGGED_WITH]- Tag
+
+// Shorthand edges - bidirectional (<->)
+User <-[MENTIONS]-> User
+User <-[BLOCKS]-> User
+Category <-[RELATED_TO]-> Category
+
+// Self-referencing nodes examples
+User <-[FRIENDS_WITH]-> User
+Post <-[REPLIES_TO]-> Post
+Comment <-[NESTED_IN]-> Comment
+
+// Mixed complex and shorthand for same node
+edge MODERATES (from: User, to: Category) {
+    role: string,
+    permissions: string,
+    assigned_date: date
+}
+
+User -[SUBSCRIBES_TO]-> Category

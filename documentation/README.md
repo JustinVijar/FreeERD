@@ -1,13 +1,13 @@
 # FreeERD Documentation
 
-Welcome to the FreeERD documentation! This comprehensive guide will help you master creating Entity Relationship Diagrams with FreeERD.
+Welcome to the FreeERD documentation! This comprehensive guide will help you master creating Entity Relationship Diagrams and graph database schemas with FreeERD.
 
 ## 📚 Documentation Index
 
 ### Getting Started
 - **[Getting Started Guide](getting-started.md)** - Installation and your first diagram
   - Installation from source
-  - Creating your first ERD
+  - Creating your first ERD or graph schema
   - Basic concepts and workflow
   - Common issues and solutions
 
@@ -15,9 +15,15 @@ Welcome to the FreeERD documentation! This comprehensive guide will help you mas
 - **[Schema Syntax Reference](schema-syntax.md)** - Complete syntax guide
   - File structure and comments
   - Table and column definitions
+  - Node and edge definitions
   - Field attributes (pk, fk, unique, nullable, autoincrement, default)
-  - Relationship syntax and types
+  - Relationship and edge syntax and types
   - Validation rules
+
+- **[Graph Database Concepts](graph-concepts.md)** - Understanding graph databases
+  - When to use graphs vs relational databases
+  - Nodes vs tables, edges vs relationships
+  - Common graph patterns and migration strategies
 
 - **[Data Types](data-types.md)** - All supported data types
   - Numeric types (int, float, double)
@@ -27,21 +33,23 @@ Welcome to the FreeERD documentation! This comprehensive guide will help you mas
   - Binary types (blob, tinyblob, largeblob)
   - Custom types
 
-- **[Relationships Guide](relationships.md)** - Understanding relationships
-  - One-to-Many (`>`)
-  - Many-to-One (`<`)
-  - Many-to-Many (`<>`)
-  - One-to-One (`-`)
+- **[Relationships Guide](relationships.md)** - Understanding relationships and edges
+  - Relational relationships (One-to-Many, Many-to-One, etc.)
+  - Graph edges (directed, bidirectional)
   - Self-referencing relationships
   - Junction tables and composite keys
 
 ### Examples
 - **[Examples](examples.md)** - Real-world schema examples
-  - Point of Sales System
-  - E-commerce Platform
-  - Social Media
-  - Blog Platform
-  - School Management
+  - **Relational Databases:**
+    - Point of Sales System
+    - E-commerce Platform
+    - Blog Platform
+    - School Management
+  - **Graph Databases:**
+    - Social Network
+    - Knowledge Graph
+    - Recommendation System
 
 ## 🚀 Quick Start
 
@@ -71,7 +79,7 @@ free-erd help
 ### Basic Schema Structure
 
 ```
-title "Schema Name"
+#title "Schema Name"
 
 table TableName {
   id: int [pk, autoincrement],
@@ -230,7 +238,7 @@ Relationship lines:
 ## 📝 Example Schema
 
 ```
-title "Blog Platform"
+#title "Blog Platform"
 
 table Users {
   id: int [pk, autoincrement],
@@ -242,7 +250,7 @@ table Users {
 table Posts {
   id: int [pk, autoincrement],
   user_id: int [fk],
-  title: str,
+  post_title: str,
   content: str,
   published: bool [default=FALSE],
   created_at: datetime [default=NOW]

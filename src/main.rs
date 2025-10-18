@@ -2,16 +2,15 @@ mod ast;
 mod lexer;
 mod parser;
 mod interpreter;
-mod svg_generator;
+mod renderer;
 
 use parser::Parser;
 use crate::interpreter::Interpreter;
-use svg_generator::SvgGenerator;
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const VERSION: &str = "0.1.1 BETA";
+const VERSION: &str = "0.2.0 BETA";
 
 fn main() {
     let quote = get_random_quote();
@@ -29,7 +28,7 @@ fn main() {
     if let Some(q) = quote {
         println!("  {}", q);
     }
-    println!("{}", "=".repeat(60));
+    println!("{}", "=".repeat(107));
     
     let args: Vec<String> = std::env::args().collect();
     
@@ -59,38 +58,17 @@ fn main() {
             }
         }
         "run" => {
-            if args.len() < 4 {
-                eprintln!("❌ Error: Missing arguments");
-                eprintln!("Usage: free-erd run <file> <command> [output]");
-                eprintln!("\nAvailable commands:");
-                eprintln!("  svg - Generate SVG diagram");
+            if args.len() < 3 {
+                eprintln!("❌ Error: Missing file path");
+                eprintln!("Usage: free-erd run <filename>");
                 std::process::exit(1);
             }
             
             let file_path = &args[2];
-            let subcommand = &args[3];
             
-            match subcommand.as_str() {
-                "svg" => {
-                    let output_path = if args.len() > 4 {
-                        args[4].clone()
-                    } else {
-                        // Generate output filename from input
-                        let path = Path::new(file_path);
-                        let stem = path.file_stem().unwrap().to_str().unwrap();
-                        format!("{}.svg", stem)
-                    };
-                    
-                    if let Err(e) = export_svg(file_path, &output_path) {
-                        eprintln!("❌ Error: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-                _ => {
-                    eprintln!("❌ Unknown run command: {}", subcommand);
-                    eprintln!("Available commands: svg");
-                    std::process::exit(1);
-                }
+            if let Err(e) = open_window(file_path) {
+                eprintln!("❌ Error: {}", e);
+                std::process::exit(1);
             }
         }
         "about" => {
@@ -146,69 +124,14 @@ fn check_file(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn export_svg(file_path: &str, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let path = Path::new(file_path);
-    
-    if !path.exists() {
-        return Err(format!("File not found: {}", file_path).into());
-    }
-    
-    println!("\n📂 Reading file: {}", file_path);
-    let content = fs::read_to_string(path)?;
-    
-    println!("🔍 Parsing...");
-    let mut parser = Parser::new(&content);
-    let schema = match parser.parse() {
-        Ok(s) => s,
-        Err(e) => {
-            eprint!("\n{}", e.format_with_source(&content, file_path));
-            return Err(e.into());
-        }
-    };
-    
-    println!("✅ Parsing successful!");
-    
-    let interpreter = Interpreter::new(schema.clone());
-    
-    println!("🔍 Validating schema...");
-    match interpreter.validate() {
-        Ok(_) => {
-            println!("✅ Schema is valid!");
-        }
-        Err(errors) => {
-            eprintln!("\n\x1b[1;31m❌ Validation failed with {} error(s):\x1b[0m\n", errors.len());
-            for error in errors.iter() {
-                eprint!("{}", error.format_with_source(&content, file_path));
-            }
-            eprintln!("\n\x1b[1;31m❌ Cannot generate SVG with validation errors.\x1b[0m");
-            eprintln!("\x1b[1;33m💡 Fix the errors above and try again.\x1b[0m\n");
-            return Err("Validation failed".into());
-        }
-    }
-    
-    println!("🎨 Generating SVG diagram...");
-    let generator = SvgGenerator::new(schema);
-    let svg_content = generator.generate_with_defs();
-    
-    println!("💾 Writing to: {}", output_path);
-    fs::write(output_path, svg_content)?;
-    
-    println!("✅ SVG diagram created successfully!");
-    println!("\n📊 Output: {}", output_path);
-    
-    Ok(())
-}
-
 fn print_usage() {
     println!("\nUsage:");
-    println!("  free-erd <command> [options]\n");
+    println!("  free-erd <command> [arguments]\n");
     println!("Commands:");
-    println!("  help                      Shows the help menu (this menu)");
-    println!("  check <file>              Checks the .frd file if there are errors");
-    println!("  run <file> <command> [output]  Runs the .frd file with specified command");
-    println!("  about                     Info about this program\n");
-    println!("run subcommands:");
-    println!("  svg                       Outputs an SVG file of the ERD\n");
+    println!("  run <filename>               - opens the window to view the ERD");
+    println!("  check <filename>             - checks the .frd file");
+    println!("  help                         - Help menu");
+    println!("  about                        - Information about this system\n");
 }
 
 fn print_help() {
@@ -217,7 +140,6 @@ fn print_help() {
     println!("and entity relationships in a simple, human-readable format.\n");
     
     print_usage();
-
 }
 
 fn print_about() {
@@ -228,12 +150,6 @@ fn print_about() {
     println!("  using a simple domain-specific language. FreeERD allows you to define");
     println!("  database schemas in a human-readable format and generate beautiful SVG");
     println!("  diagrams automatically.\n");
-    println!("Features:");
-    println!("  • Simple, intuitive syntax for defining tables and relationships");
-    println!("  • Comprehensive validation with detailed error messages");
-    println!("  • Automatic SVG diagram generation with smart layout");
-    println!("  • Support for various data types and column attributes");
-    println!("  • Multiple relationship types (1:1, 1:N, N:M)\n");
     println!("License: GNU General Public License v2.0");
     println!("  This program is free software; you can redistribute it and/or modify it");
     println!("  under the terms of the GNU General Public License version 2 as published");
@@ -267,3 +183,80 @@ fn get_random_quote() -> Option<String> {
     let index = (seed as usize) % quotes.len();
     Some(quotes[index].to_string())
 }
+
+fn open_window(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("📂 Reading file: {}", file_path);
+    let content = fs::read_to_string(file_path)?;
+    
+    println!("🔍 Parsing...");
+    let mut parser = Parser::new(&content);
+    let schema = match parser.parse() {
+        Ok(s) => {
+            println!("✅ Parsing successful!");
+            s
+        }
+        Err(error) => {
+            eprintln!("\n\x1b[1;31m❌ Parsing failed:\x1b[0m\n");
+            eprint!("{}", error.format_with_source(&content, file_path));
+            return Err("Parsing failed".into());
+        }
+    };
+    
+    println!("🔍 Validating schema...");
+    let interpreter = Interpreter::new(schema.clone());
+    if let Err(errors) = interpreter.validate() {
+        eprintln!("\n\x1b[1;31m❌ Validation failed with {} error(s):\x1b[0m\n", errors.len());
+        for error in errors.iter() {
+            eprint!("{}", error.format_with_source(&content, file_path));
+        }
+        return Err("Validation failed".into());
+    }
+    println!("✅ Schema is valid!");
+    
+    // Convert schema to ERD graph
+    println!("🎨 Building ERD graph...");
+    let mut erd_graph = renderer::ErdGraph::new();
+    
+    // Add tables
+    for table in &schema.tables {
+        let columns: Vec<renderer::ColumnData> = table.columns.iter().map(|col| {
+            renderer::ColumnData {
+                name: col.name.clone(),
+                data_type: col.datatype.to_string(),
+                attributes: col.attributes.iter().map(|attr| attr.to_string()).collect(),
+            }
+        }).collect();
+        
+        erd_graph.add_table(renderer::TableNode {
+            name: table.name.clone(),
+            columns,
+        });
+    }
+    
+    // Add relationships
+    for rel in &schema.relationships {
+        let rel_type = match rel.relationship_type {
+            ast::RelationshipType::OneToOne => renderer::RelationType::OneToOne,
+            ast::RelationshipType::OneToMany => renderer::RelationType::OneToMany,
+            ast::RelationshipType::ManyToOne => renderer::RelationType::ManyToOne,
+            ast::RelationshipType::ManyToMany => renderer::RelationType::ManyToMany,
+        };
+        
+        erd_graph.add_relationship(
+            &rel.from_table,
+            &rel.to_table,
+            renderer::RelationshipEdge {
+                from_field: rel.from_field.clone(),
+                to_field: rel.to_field.clone(),
+                relationship_type: rel_type,
+            },
+        )?;
+    }
+    
+    println!("🪟 Opening window...");
+    let title = schema.title.clone().unwrap_or_else(|| "Untitled Schema".to_string());
+    renderer::render_window(erd_graph, title)?;
+    
+    Ok(())
+}
+

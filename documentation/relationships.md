@@ -1,36 +1,38 @@
-# Relationships Guide
+# Relationships and Edges Guide
 
-Complete guide to defining and understanding relationships in FreeERD based on the actual implementation.
+Complete guide to defining and understanding relationships in relational databases and edges in graph databases with FreeERD.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Relationship Types](#relationship-types)
-3. [Cardinality Notation](#cardinality-notation)
-4. [Self-Referencing Relationships](#self-referencing-relationships)
-5. [Many-to-Many Relationships](#many-to-many-relationships)
-6. [Composite Keys](#composite-keys)
-7. [Best Practices](#best-practices)
-8. [Common Patterns](#common-patterns)
+2. [Relational Relationships](#relational-relationships)
+3. [Graph Edges](#graph-edges)
+4. [Cardinality Notation](#cardinality-notation)
+5. [Self-Referencing](#self-referencing)
+6. [Many-to-Many](#many-to-many)
+7. [Composite Keys](#composite-keys)
+8. [Best Practices](#best-practices)
+9. [Common Patterns](#common-patterns)
 
 ## Overview
 
-Relationships define how tables are connected in your database schema. FreeERD supports all standard relationship types with clear visual indicators.
+FreeERD supports both traditional relational database relationships and modern graph database edges. Relationships connect tables using foreign keys, while edges connect nodes with rich properties.
 
-### Basic Syntax
+### Relational Syntax
 
 ```
 SourceTable.source_column OPERATOR TargetTable.target_column
 ```
 
-**Components**:
-- **SourceTable**: The table where the relationship starts
-- **source_column**: The column in the source table
-- **OPERATOR**: The relationship type (`>`, `<`, `<>`, `-`)
-- **TargetTable**: The table where the relationship ends
-- **target_column**: The column in the target table
+### Graph Syntax
 
-## Relationship Types
+```
+SourceNode -[EDGE_NAME]-> TargetNode
+SourceNode <-[EDGE_NAME]- TargetNode
+SourceNode <-[EDGE_NAME]-> TargetNode
+```
+
+## Relational Relationships
 
 ### One-to-Many (1:N)
 
@@ -178,6 +180,85 @@ Users.id - UserProfiles.user_id
 - Country → Capital
 - Employee → Desk
 - Product → ProductDetails
+
+## Graph Edges
+
+Graph databases use edges to connect nodes. Edges can be directed, bidirectional, and can have rich properties.
+
+### Edge Syntax
+
+#### Shorthand Syntax
+```
+SourceNode -[EDGE_NAME]-> TargetNode    // Outgoing edge
+SourceNode <-[EDGE_NAME]- TargetNode    // Incoming edge
+SourceNode <-[EDGE_NAME]-> TargetNode   // Bidirectional edge
+```
+
+#### Complex Syntax
+```
+edge EdgeName (from: SourceNode, to: TargetNode) {
+  property_name: datatype [attributes]
+}
+```
+
+### Edge Types
+
+#### Directed Edges
+
+**Outgoing (`->`)**: `SourceNode -[FOLLOWS]-> TargetNode`
+- Direction matters: A follows B, but B doesn't necessarily follow A
+- Visual: Arrow pointing right
+
+**Incoming (`<-`)**: `SourceNode <-[AUTHORED]- TargetNode`
+- Direction matters: Post is authored by User
+- Visual: Arrow pointing left
+
+#### Bidirectional Edges
+
+**Bidirectional (`<->`)**: `SourceNode <-[FRIENDS_WITH]-> TargetNode`
+- Mutual relationship: A and B are friends
+- Visual: Arrows pointing both ways
+
+### Examples
+
+```
+node User {
+  id: int [pk],
+  name: str
+}
+
+node Post {
+  id: int [pk],
+  title: str
+}
+
+// Directed edges
+User -[FOLLOWS]-> User
+User -[AUTHORED]-> Post
+
+// Bidirectional edges
+User <-[FRIENDS_WITH]-> User
+User <-[MARRIED_TO]-> User
+
+// Complex edges with properties
+edge PURCHASED (from: User, to: Product) {
+  quantity: int,
+  purchase_date: datetime,
+  rating: int [nullable]
+}
+```
+
+### Edge Properties
+
+Unlike relational foreign keys, edges can store rich relationship data:
+
+```
+edge FOLLOWS (from: User, to: User) {
+  since: date,
+  closeness: str,  // "close", "acquaintance"
+  notifications: bool [default=TRUE]
+}
+```
 
 ## Cardinality Notation
 

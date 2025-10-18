@@ -9,32 +9,48 @@ Complete reference for FreeERD schema definition language based on the actual im
 3. [Title Declaration](#title-declaration)
 4. [Table Definition](#table-definition)
 5. [Column Syntax](#column-syntax)
-6. [Data Types](#data-types)
-7. [Column Attributes](#column-attributes)
-8. [Relationship Syntax](#relationship-syntax)
-9. [Validation Rules](#validation-rules)
-10. [Complete Example](#complete-example)
+6. [Node Definition](#node-definition)
+7. [Edge Definition](#edge-definition)
+8. [Data Types](#data-types)
+9. [Field Attributes](#field-attributes)
+10. [Relationship Syntax](#relationship-syntax)
+11. [Edge Syntax](#edge-syntax)
+12. [Validation Rules](#validation-rules)
+13. [Complete Examples](#complete-examples)
 
 ## File Structure
 
 A FreeERD schema file (`.frd`) consists of:
 
 ```
-title "Schema Name"
+#title "Schema Name"
 
+// Tables for relational databases
 table TableName {
   column_name: datatype [attributes],
   another_column: datatype
 }
 
-// Relationships
+// Nodes for graph databases
+node NodeName {
+  field_name: datatype [attributes],
+  another_field: datatype
+}
+
+// Edges for graph databases
+edge EdgeName (from: SourceNode, to: TargetNode) {
+  property_name: datatype [attributes]
+}
+
+// Relationships (relational) or Edges (graph)
 Table1.field OPERATOR Table2.field
+SourceNode -[EDGE_NAME]-> TargetNode
 ```
 
 **Order**:
-1. Title (optional but recommended)
-2. Table definitions
-3. Relationships
+1. Title (optional but recommended) - must use `#title` directive
+2. Table and/or Node definitions
+3. Relationships and/or Edges
 
 ## Comments
 
@@ -58,24 +74,25 @@ Users.id > Posts.user_id
 
 ## Title Declaration
 
-Every schema should start with a title:
+Every schema should start with a title using the `#title` directive:
 
 ```
-title "My Database Schema"
+#title "My Database Schema"
 ```
 
-**Format**: `title "string"`
+**Format**: `#title "string"`
 
 **Rules**:
 - Optional but recommended
 - Must be a quoted string
+- Uses the `#title` directive (note the `#` prefix)
 - Appears once at the beginning of the file
 
 **Examples**:
 ```
-title "E-commerce Platform"
-title "Blog Database"
-title "Point of Sales System"
+#title "E-commerce Platform"
+#title "Blog Database"
+#title "Point of Sales System"
 ```
 
 ## Table Definition
@@ -209,9 +226,9 @@ profile_image: blob
 custom_field: MyCustomType
 ```
 
-## Column Attributes
+## Field Attributes
 
-Attributes modify column behavior. Multiple attributes are separated by commas.
+Attributes modify field behavior in both tables and nodes. Multiple attributes are separated by commas.
 
 ### Primary Key `[pk]`
 
@@ -312,6 +329,99 @@ table ProductSuppliers {
 }
 ```
 
+## Node Definition
+
+Nodes represent entities in graph databases. They are similar to tables but used for graph structures.
+
+### Basic Syntax
+
+```
+node NodeName {
+  field_name: datatype [attributes],
+  another_field: datatype
+}
+```
+
+### Naming Rules
+
+**Node Names**:
+- Must start with a letter
+- Can contain letters, numbers, underscores
+- Case-sensitive
+- Convention: Use PascalCase (e.g., `User`, `Post`, `Comment`, `ProductCategory`)
+
+### Field Syntax
+
+Node fields follow the same syntax as table columns:
+
+```
+field_name: datatype [attribute1, attribute2, ...]
+```
+
+**Examples**:
+```
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  email: str [unique, nullable],
+  age: int [nullable],
+  created_at: datetime [default=NOW]
+}
+
+node Product {
+  id: int [pk, autoincrement],
+  name: str,
+  price: decimal,
+  in_stock: bool [default=TRUE]
+}
+```
+
+## Edge Definition
+
+Edges represent relationships between nodes in graph databases.
+
+### Complex Edge Syntax
+
+```
+edge EdgeName (from: SourceNode, to: TargetNode) {
+  property_name: datatype [attributes]
+}
+```
+
+### Shorthand Edge Syntax
+
+```
+SourceNode -[EDGE_NAME]-> TargetNode
+SourceNode <-[EDGE_NAME]- TargetNode
+SourceNode <-[EDGE_NAME]-> TargetNode
+```
+
+### Edge Types
+
+- **Outgoing** (`->`): `SourceNode -[EDGE_NAME]-> TargetNode`
+- **Incoming** (`<-`): `SourceNode <-[EDGE_NAME]- TargetNode`
+- **Bidirectional** (`<->`): `SourceNode <-[EDGE_NAME]-> TargetNode`
+
+### Examples
+
+```
+edge FOLLOWS (from: User, to: User) {
+  since: date,
+  is_mutual: bool [default=FALSE]
+}
+
+edge AUTHORED (from: User, to: Post) {
+  created_at: datetime
+}
+
+// Shorthand equivalents
+User -[FOLLOWS]-> User
+User -[AUTHORED]-> Post
+```
+
+## Relationship Syntax
+```
+
 ## Relationship Syntax
 
 ### Format
@@ -370,6 +480,49 @@ table Categories {
 Categories.id > Categories.parent_id
 ```
 
+## Edge Syntax
+
+Edges connect nodes in graph databases and can be defined using shorthand syntax.
+
+### Shorthand Syntax
+
+```
+SourceNode -[EDGE_NAME]-> TargetNode
+SourceNode <-[EDGE_NAME]- TargetNode
+SourceNode <-[EDGE_NAME]-> TargetNode
+```
+
+### Edge Name Rules
+
+- Must be uppercase letters and underscores
+- Convention: Use SCREAMING_SNAKE_CASE (e.g., `FOLLOWS`, `AUTHORED`, `BELONGS_TO`)
+
+### Direction Indicators
+
+- `->` **Outgoing edge**: `SourceNode -[EDGE_NAME]-> TargetNode`
+- `<-` **Incoming edge**: `SourceNode <-[EDGE_NAME]- TargetNode`
+- `<->` **Bidirectional edge**: `SourceNode <-[EDGE_NAME]-> TargetNode`
+
+### Examples
+
+```
+User -[FOLLOWS]-> User
+User <-[AUTHORED]- Post
+User <-[LIKES]-> Post
+Post <-[TAGGED_WITH]- Tag
+Category <-[RELATED_TO]-> Category
+```
+
+### Self-Referencing Edges
+
+Nodes can reference themselves:
+
+```
+User <-[FRIENDS_WITH]-> User
+Post <-[REPLIES_TO]-> Post
+Comment <-[NESTED_IN]-> Comment
+```
+
 ## Validation Rules
 
 FreeERD validates your schema and reports errors for:
@@ -417,10 +570,12 @@ table OrderItems {
 }
 ```
 
-## Complete Example
+## Complete Examples
+
+### Relational Database Example
 
 ```
-title "E-commerce Database"
+#title "E-commerce Database"
 
 // User management
 table Users {
@@ -481,6 +636,69 @@ Products.id > OrderItems.product_id
 
 // Many-to-One (alternative syntax)
 OrderItems.order_id < Orders.id
+```
+
+### Graph Database Example
+
+```
+#title "Social Network Graph"
+
+// Node definitions
+node User {
+  id: int [pk, autoincrement],
+  username: str [unique],
+  email: str [unique],
+  full_name: str,
+  age: int [nullable],
+  created_at: datetime
+}
+
+node Post {
+  id: int [pk, autoincrement],
+  title: str,
+  content: str,
+  published_at: datetime,
+  view_count: int [default=0]
+}
+
+node Comment {
+  id: int [pk, autoincrement],
+  text: str,
+  created_at: datetime
+}
+
+node Tag {
+  id: int [pk, autoincrement],
+  name: str [unique],
+  description: str [nullable]
+}
+
+// Complex edges with properties
+edge FOLLOWS (from: User, to: User) {
+  since: date,
+  is_mutual: bool [default=FALSE]
+}
+
+edge AUTHORED (from: User, to: Post) {
+  created_at: datetime,
+  is_draft: bool [default=FALSE]
+}
+
+edge COMMENTED_ON (from: User, to: Comment) {
+  timestamp: datetime
+}
+
+// Shorthand edges
+User -[LIKES]-> Post
+User -[BOOKMARKS]-> Post
+User -[REPORTS]-> Post
+
+Comment <-[ATTACHED_TO]- Post
+Post <-[TAGGED_WITH]- Tag
+
+// Self-referencing edges
+User <-[FRIENDS_WITH]-> User
+Post <-[REPLIES_TO]-> Post
 ```
 
 ## Best Practices

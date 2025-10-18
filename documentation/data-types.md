@@ -15,12 +15,13 @@ Complete guide to all data types supported by FreeERD based on the actual implem
 
 ## Overview
 
-FreeERD supports common database data types that map to standard SQL types. The parser recognizes both full names and common aliases.
+FreeERD supports common database data types that work with both relational tables and graph nodes. The parser recognizes both full names and common aliases.
 
 ### Syntax
 
 ```
-column_name: datatype [attributes]
+column_name: datatype [attributes]    // For table columns
+field_name: datatype [attributes]     // For node fields
 ```
 
 ## String Types

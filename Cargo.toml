@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+egui = "0.29"
+eframe = "0.29"
+winit = "0.30"
+euclid = "0.22"
+ab_glyph = "0.2"
+tiny-skia = "0.11"
+petgraph = "0.6"
+rand = "0.8"
+chrono = "0.4"
