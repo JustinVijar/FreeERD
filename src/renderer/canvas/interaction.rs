@@ -1,7 +1,5 @@
 use egui::{Pos2, Rect};
 
-#[allow(dead_code)]
-
 pub fn get_label_position_world(
     edge_route: &crate::renderer::layout::EdgeRoute,
     cached_positions: &[Option<(f32, f32)>],
@@ -56,7 +54,7 @@ pub fn get_edge_middle_point_simple(points: &[crate::renderer::layout::Point]) -
     }
     
     None
-}
+}#[allow(dead_code)]
 
 pub fn check_title_click(
     pos: Pos2,

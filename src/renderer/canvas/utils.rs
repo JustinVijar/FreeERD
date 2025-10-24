@@ -14,6 +14,139 @@ pub fn screen_to_world(screen_pos: Pos2, zoom: f32, pan_offset: Pos2) -> (f32, f
     )
 }
 
+/// Check if a box at the proposed position collides with any existing tables
+pub fn check_collision_with_tables(
+    erd_graph: &crate::renderer::graph::ErdGraph,
+    layout_engine: &crate::renderer::layout::LayoutEngine,
+    proposed_x: f32,
+    proposed_y: f32,
+    table_width: f32,
+    table_height: f32,
+    exclude_node: petgraph::graph::NodeIndex,
+) -> bool {
+    let proposed_rect = egui::Rect::from_min_size(
+        Pos2::new(proposed_x, proposed_y),
+        egui::vec2(table_width, table_height),
+    );
+    
+    for node_idx in erd_graph.graph().node_indices() {
+        if node_idx == exclude_node {
+            continue; // Don't check collision with self
+        }
+        
+        if let Some(layout) = layout_engine.get_node_layout(node_idx) {
+            let other_rect = egui::Rect::from_min_size(
+                Pos2::new(layout.position.x, layout.position.y),
+                egui::vec2(layout.size.width, layout.size.height),
+            );
+            
+            if proposed_rect.intersects(other_rect) {
+                return true; // Collision detected
+            }
+        }
+    }
+    
+    false
+}
+
+/// Resolve collision by sliding the box to the nearest non-colliding position
+pub fn resolve_collision(
+    erd_graph: &crate::renderer::graph::ErdGraph,
+    layout_engine: &crate::renderer::layout::LayoutEngine,
+    proposed_x: f32,
+    proposed_y: f32,
+    table_width: f32,
+    table_height: f32,
+    exclude_node: petgraph::graph::NodeIndex,
+) -> (f32, f32) {
+    // If no collision, return the proposed position
+    if !check_collision_with_tables(
+        erd_graph,
+        layout_engine,
+        proposed_x,
+        proposed_y,
+        table_width,
+        table_height,
+        exclude_node,
+    ) {
+        return (proposed_x, proposed_y);
+    }
+    
+    // Try to push the box away from colliding objects
+    // Test multiple directions: up, down, left, right
+    
+    let max_offset = 150.0; // Maximum offset before giving up
+    let step = 5.0; // Increment step
+    
+    let original_x = proposed_x;
+    let original_y = proposed_y;
+    
+    // Try pushing vertically first
+    for offset_steps in 1..=(max_offset / step) as i32 {
+        let offset = offset_steps as f32 * step;
+        
+        // Try moving up
+        if !check_collision_with_tables(
+            erd_graph,
+            layout_engine,
+            proposed_x,
+            proposed_y - offset,
+            table_width,
+            table_height,
+            exclude_node,
+        ) {
+            return (proposed_x, proposed_y - offset);
+        }
+        
+        // Try moving down
+        if !check_collision_with_tables(
+            erd_graph,
+            layout_engine,
+            proposed_x,
+            proposed_y + offset,
+            table_width,
+            table_height,
+            exclude_node,
+        ) {
+            return (proposed_x, proposed_y + offset);
+        }
+    }
+    
+    // Try pushing horizontally
+    for offset_steps in 1..=(max_offset / step) as i32 {
+        let offset = offset_steps as f32 * step;
+        
+        // Try moving left
+        if !check_collision_with_tables(
+            erd_graph,
+            layout_engine,
+            proposed_x - offset,
+            proposed_y,
+            table_width,
+            table_height,
+            exclude_node,
+        ) {
+            return (proposed_x - offset, proposed_y);
+        }
+        
+        // Try moving right
+        if !check_collision_with_tables(
+            erd_graph,
+            layout_engine,
+            proposed_x + offset,
+            proposed_y,
+            table_width,
+            table_height,
+            exclude_node,
+        ) {
+            return (proposed_x + offset, proposed_y);
+        }
+    }
+    
+    // If all else fails, keep the original position
+    (original_x, original_y)
+}
+
 pub fn calculate_bounds(
     erd_graph: &crate::renderer::graph::ErdGraph,
     layout_engine: &crate::renderer::layout::LayoutEngine,

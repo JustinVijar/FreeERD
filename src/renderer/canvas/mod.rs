@@ -529,10 +529,27 @@ impl eframe::App for ErdCanvas {
                             self.title_position = (world_x, world_y);
                         }
                         DragTarget::Table(node_idx) => {
-                            // Update table position
-                            if let Some(layout) = self.layout_engine.get_node_layout_mut(*node_idx) {
-                                layout.position.x = world_x;
-                                layout.position.y = world_y;
+                            // Get table dimensions for collision detection
+                            if let Some(layout) = self.layout_engine.get_node_layout(*node_idx) {
+                                let table_width = layout.size.width;
+                                let table_height = layout.size.height;
+                                
+                                // Resolve collisions with other tables
+                                let (final_x, final_y) = utils::resolve_collision(
+                                    &self.erd_graph,
+                                    &self.layout_engine,
+                                    world_x,
+                                    world_y,
+                                    table_width,
+                                    table_height,
+                                    *node_idx,
+                                );
+                                
+                                // Update table position with collision resolution
+                                if let Some(layout) = self.layout_engine.get_node_layout_mut(*node_idx) {
+                                    layout.position.x = final_x;
+                                    layout.position.y = final_y;
+                                }
                             }
                             // Recalculate edge routes
                             self.layout_engine.recompute_edge_routes(&self.erd_graph);
