@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const VERSION: &str = "0.2.1t BETA";
+const VERSION: &str = "0.2.1 BETA";
 
 fn main() {
     let quote = get_random_quote();
