@@ -1,11 +1,11 @@
 [package]
 name = "free-erd"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 
 [dependencies]
 egui = "0.29"
-eframe = "0.29"
+eframe = { version = "0.29", features = ["default", "wgpu"] }
 winit = "0.30"
 euclid = "0.22"
 ab_glyph = "0.2"
